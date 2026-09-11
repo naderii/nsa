@@ -1,0 +1,58 @@
+image: eclipse-temurin:17-jdk
+
+stages:
+  - build
+  - lint
+
+variables:
+  ANDROID_COMPILE_SDK: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_SDK_TOOLS: "11076708"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+cache:
+  key: ${CI_PROJECT_ID}
+  paths:
+    - .gradle/
+
+before_script:
+  - apt-get --quiet update --yes
+  - apt-get --quiet install --yes wget unzip
+  - export ANDROID_HOME="${PWD}/android-sdk"
+  - install -d $ANDROID_HOME
+  - wget --quiet --output-document=cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS}_latest.zip"
+  - unzip -q cmdline-tools.zip -d $ANDROID_HOME
+  - mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools-tmp
+  - install -d $ANDROID_HOME/cmdline-tools
+  - mv $ANDROID_HOME/cmdline-tools-tmp $ANDROID_HOME/cmdline-tools/latest
+  - export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+  - yes | sdkmanager --licenses > /dev/null || true
+  - sdkmanager "platforms;android-${ANDROID_COMPILE_SDK}" "build-tools;${ANDROID_BUILD_TOOLS}" "platform-tools"
+  - chmod +x ./gradlew
+  # This project pins org.gradle.java.home in gradle.properties for local dev;
+  # override it here since the CI image's JDK 17 lives at a different path.
+  - sed -i '/org.gradle.java.home/d' gradle.properties
+
+build_debug_apk:
+  stage: build
+  script:
+    - ./gradlew assembleDebug
+  artifacts:
+    paths:
+      - app/build/outputs/apk/debug/*.apk
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+lint:
+  stage: lint
+  script:
+    - ./gradlew lint
+  artifacts:
+    paths:
+      - app/build/reports/lint-results*.html
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
