@@ -11,6 +11,9 @@
     <!-- Reschedule alarms after device reboot (AlarmManager alarms don't survive reboot) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Read contacts so the user can pick a counterparty instead of typing a name -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Request exemption from aggressive battery optimization (Xiaomi/Samsung/Huawei etc.) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 

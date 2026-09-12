@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
             NsaTheme {
                 val navController = rememberNavController()
                 val reminders by viewModel.reminders.collectAsState()
+                val knownCategories by viewModel.knownCategories.collectAsState()
 
                 NavHost(navController = navController, startDestination = "list") {
                     composable("list") {
@@ -54,14 +55,16 @@ class MainActivity : ComponentActivity() {
                             reminders = reminders,
                             onAddClick = { navController.navigate("add") },
                             onToggleDone = { viewModel.toggleDone(it) },
-                            onDelete = { viewModel.deleteReminder(it) }
+                            onDelete = { viewModel.deleteReminder(it) },
+                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) }
                         )
                     }
                     composable("add") {
                         AddReminderScreen(
-                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty ->
+                            knownCategories = knownCategories,
+                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone ->
                                 viewModel.addReminder(
-                                    title, note, category, color, trigger, repeat, amount, counterparty
+                                    title, note, category, color, trigger, repeat, amount, counterparty, phone
                                 )
                                 navController.popBackStack()
                             },

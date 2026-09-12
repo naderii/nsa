@@ -23,6 +23,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders")
     suspend fun getAllOnce(): List<Reminder>
 
+    @Query("SELECT DISTINCT category FROM reminders ORDER BY category ASC")
+    fun observeCategories(): Flow<List<String>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(reminder: Reminder): Long
 

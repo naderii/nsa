@@ -1,18 +1,28 @@
 package ir.naderinia.nsa.ui.screens
 
+import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.ui.theme.CategoryColors
+import ir.naderinia.nsa.util.resolveContact
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -20,6 +30,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddReminderScreen(
+    knownCategories: List<String>,
     onSave: (
         title: String,
         note: String,
@@ -28,7 +39,8 @@ fun AddReminderScreen(
         triggerAtMillis: Long,
         repeatInterval: RepeatInterval,
         amount: Long?,
-        counterparty: String?
+        counterparty: String?,
+        counterpartyPhone: String?
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -42,6 +54,36 @@ fun AddReminderScreen(
     var isFinancial by remember { mutableStateOf(false) }
     var amountText by remember { mutableStateOf("") }
     var counterparty by remember { mutableStateOf("") }
+    var counterpartyPhone by remember { mutableStateOf<String?>(null) }
+
+    val pickContactLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickContact()
+    ) { uri ->
+        uri?.let {
+            resolveContact(context, it)?.let { picked ->
+                counterparty = picked.displayName
+                counterpartyPhone = picked.phoneNumber
+            }
+        }
+    }
+
+    val requestContactsPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) pickContactLauncher.launch(null)
+    }
+
+    fun pickFromContacts() {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            pickContactLauncher.launch(null)
+        } else {
+            requestContactsPermission.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
 
     val calendar = remember { Calendar.getInstance() }
     var triggerMillis by remember { mutableStateOf(calendar.timeInMillis) }
@@ -78,6 +120,17 @@ fun AddReminderScreen(
                 label = { Text("دسته‌بندی") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            if (knownCategories.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(knownCategories) { existingCategory ->
+                        AssistChip(
+                            onClick = { category = existingCategory },
+                            label = { Text(existingCategory) }
+                        )
+                    }
+                }
+            }
 
             Button(onClick = {
                 DatePickerDialog(
@@ -148,8 +201,21 @@ fun AddReminderScreen(
                 )
                 OutlinedTextField(
                     value = counterparty,
-                    onValueChange = { counterparty = it },
+                    onValueChange = {
+                        counterparty = it
+                        counterpartyPhone = null // typed manually, no longer tied to a contact
+                    },
                     label = { Text("طرف حساب") },
+                    trailingIcon = {
+                        IconButton(onClick = { pickFromContacts() }) {
+                            Icon(Icons.Default.Contacts, contentDescription = "انتخاب از مخاطبین")
+                        }
+                    },
+                    supportingText = {
+                        if (counterpartyPhone != null) {
+                            Text("از مخاطبین: $counterpartyPhone")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -168,7 +234,8 @@ fun AddReminderScreen(
                             triggerMillis,
                             repeatInterval,
                             if (isFinancial) amountText.toLongOrNull() else null,
-                            if (isFinancial) counterparty.ifBlank { null } else null
+                            if (isFinancial) counterparty.ifBlank { null } else null,
+                            if (isFinancial) counterpartyPhone else null
                         )
                     },
                     enabled = title.isNotBlank(),

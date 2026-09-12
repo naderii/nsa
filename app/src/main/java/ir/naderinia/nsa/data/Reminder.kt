@@ -27,5 +27,6 @@ data class Reminder(
     // so the schema does not need to change later).
     val amount: Long? = null,          // amount in Toman, null = not a financial reminder
     val counterparty: String? = null,  // who owes / is owed
+    val counterpartyPhone: String? = null,
     val amountPaid: Long = 0
 )

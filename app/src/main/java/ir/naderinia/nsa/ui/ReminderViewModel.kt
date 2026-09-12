@@ -19,6 +19,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     val reminders: StateFlow<List<Reminder>> = dao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val knownCategories: StateFlow<List<String>> = dao.observeCategories()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun addReminder(
         title: String,
         note: String,
@@ -27,7 +30,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         triggerAtMillis: Long,
         repeatInterval: RepeatInterval,
         amount: Long? = null,
-        counterparty: String? = null
+        counterparty: String? = null,
+        counterpartyPhone: String? = null
     ) {
         viewModelScope.launch {
             val reminder = Reminder(
@@ -38,7 +42,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 triggerAtMillis = triggerAtMillis,
                 repeatInterval = repeatInterval,
                 amount = amount,
-                counterparty = counterparty
+                counterparty = counterparty,
+                counterpartyPhone = counterpartyPhone
             )
             val id = dao.upsert(reminder)
             NotificationScheduler.schedule(getApplication(), reminder.copy(id = id))
@@ -55,6 +60,23 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun toggleDone(reminder: Reminder) {
         viewModelScope.launch {
             dao.update(reminder.copy(isDone = !reminder.isDone))
+        }
+    }
+
+    /**
+     * Records a partial or full payment against a financial reminder.
+     * When the accumulated payments reach the total amount, the reminder
+     * is marked done and its pending alarm (if any) is cancelled.
+     */
+    fun recordPayment(reminder: Reminder, paymentAmount: Long) {
+        if (paymentAmount <= 0) return
+        viewModelScope.launch {
+            val newPaid = reminder.amountPaid + paymentAmount
+            val fullyPaid = reminder.amount != null && newPaid >= reminder.amount
+            dao.update(reminder.copy(amountPaid = newPaid, isDone = fullyPaid))
+            if (fullyPaid) {
+                NotificationScheduler.cancel(getApplication(), reminder.id)
+            }
         }
     }
 }
