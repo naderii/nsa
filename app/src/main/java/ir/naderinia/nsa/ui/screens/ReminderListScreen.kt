@@ -15,12 +15,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.Reminder
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+private enum class ReminderGroup(val label: String) {
+    OVERDUE("عقب‌افتاده"),
+    TODAY("امروز"),
+    TOMORROW("فردا"),
+    THIS_WEEK("این هفته"),
+    LATER("بعداً"),
+    DONE("انجام‌شده")
+}
+
+private fun isSameDay(a: Calendar, b: Calendar): Boolean =
+    a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+
+private fun groupFor(reminder: Reminder): ReminderGroup {
+    if (reminder.isDone) return ReminderGroup.DONE
+
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply { timeInMillis = reminder.triggerAtMillis }
+
+    return when {
+        reminder.triggerAtMillis < System.currentTimeMillis() -> ReminderGroup.OVERDUE
+        isSameDay(now, target) -> ReminderGroup.TODAY
+        isSameDay((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }, target) -> ReminderGroup.TOMORROW
+        target.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+            target.get(Calendar.WEEK_OF_YEAR) == now.get(Calendar.WEEK_OF_YEAR) -> ReminderGroup.THIS_WEEK
+        else -> ReminderGroup.LATER
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,13 +79,43 @@ fun ReminderListScreen(
                 Text("هنوز یادآوری‌ای ثبت نکردی. با دکمه‌ی + شروع کن.")
             }
         } else {
+            val grouped = reminders.groupBy { groupFor(it) }
+            val orderedGroups = listOf(
+                ReminderGroup.OVERDUE,
+                ReminderGroup.TODAY,
+                ReminderGroup.TOMORROW,
+                ReminderGroup.THIS_WEEK,
+                ReminderGroup.LATER,
+                ReminderGroup.DONE
+            )
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(reminders, key = { it.id }) { reminder ->
-                    ReminderCard(reminder, onToggleDone, onDelete, onRecordPayment)
+                orderedGroups.forEach { group ->
+                    val items = grouped[group].orEmpty()
+                    if (items.isNotEmpty()) {
+                        item(key = "header_${group.name}") {
+                            Text(
+                                text = group.label,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (group == ReminderGroup.OVERDUE) Color(0xFFC62828) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                        items(items, key = { it.id }) { reminder ->
+                            ReminderCard(
+                                reminder = reminder,
+                                isOverdue = group == ReminderGroup.OVERDUE,
+                                onToggleDone = onToggleDone,
+                                onDelete = onDelete,
+                                onRecordPayment = onRecordPayment
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -65,6 +125,7 @@ fun ReminderListScreen(
 @Composable
 private fun ReminderCard(
     reminder: Reminder,
+    isOverdue: Boolean,
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit
@@ -72,7 +133,14 @@ private fun ReminderCard(
     val formatter = remember(reminder.id) { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var showPaymentDialog by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (isOverdue) {
+            CardDefaults.cardColors(containerColor = Color(0xFFFDECEA))
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -89,6 +157,7 @@ private fun ReminderCard(
                     Text(
                         text = reminder.title,
                         style = MaterialTheme.typography.titleMedium,
+                        color = if (isOverdue) Color(0xFFC62828) else Color.Unspecified,
                         textDecoration = if (reminder.isDone) TextDecoration.LineThrough else null
                     )
                     Text(
