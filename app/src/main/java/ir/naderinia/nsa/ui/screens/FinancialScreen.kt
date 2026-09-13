@@ -116,7 +116,7 @@ private fun SummaryStat(label: String, value: Long, color: Color, modifier: Modi
 
 @Composable
 private fun FinancialItemCard(reminder: Reminder, onRecordPayment: (Reminder, Long) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }
+    val showDialog = remember { mutableStateOf(false) }
     val formatter = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
     val remaining = (reminder.amount ?: 0) - reminder.amountPaid
 
@@ -138,7 +138,7 @@ private fun FinancialItemCard(reminder: Reminder, onRecordPayment: (Reminder, Lo
             )
             if (!reminder.isDone) {
                 TextButton(
-                    onClick = { showDialog = true },
+                    onClick = { showDialog.value = true },
                     modifier = Modifier.align(Alignment.End)
                 ) {
                     Text("ثبت پرداخت")
@@ -147,26 +147,26 @@ private fun FinancialItemCard(reminder: Reminder, onRecordPayment: (Reminder, Lo
         }
     }
 
-    if (showDialog) {
-        var amountText by remember { mutableStateOf("") }
+    if (showDialog.value) {
+        val amountText = remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { showDialog.value = false },
             title = { Text("ثبت پرداخت") },
             text = {
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it.filter { c -> c.isDigit() } },
+                    value = amountText.value,
+                    onValueChange = { amountText.value = it.filter { c -> c.isDigit() } },
                     label = { Text("مبلغ (تومان)") }
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    amountText.toLongOrNull()?.let { onRecordPayment(reminder, it) }
-                    showDialog = false
+                    amountText.value.toLongOrNull()?.let { onRecordPayment(reminder, it) }
+                    showDialog.value = false
                 }) { Text("ثبت") }
             },
             dismissButton = {
-                TextButton(onClick = { showDialog = false }) { Text("انصراف") }
+                TextButton(onClick = { showDialog.value = false }) { Text("انصراف") }
             }
         )
     }
