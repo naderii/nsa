@@ -7,6 +7,14 @@ enum class RepeatInterval {
     NONE, DAILY, WEEKLY, MONTHLY, YEARLY
 }
 
+enum class FinancialType {
+    DEBT,        // بدهی من — من به کسی بدهکارم
+    CREDIT,      // طلب من — کسی به من بدهکاره
+    CHECK,       // چک
+    INSTALLMENT, // قسط یا وام
+    BILL         // قبض
+}
+
 @Entity(tableName = "reminders")
 data class Reminder(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -28,5 +36,6 @@ data class Reminder(
     val amount: Long? = null,          // amount in Toman, null = not a financial reminder
     val counterparty: String? = null,  // who owes / is owed
     val counterpartyPhone: String? = null,
-    val amountPaid: Long = 0
+    val amountPaid: Long = 0,
+    val financialType: FinancialType? = null // null when amount is null (not a financial reminder)
 )

@@ -8,4 +8,10 @@ class Converters {
 
     @TypeConverter
     fun toRepeatInterval(value: String): RepeatInterval = RepeatInterval.valueOf(value)
+
+    @TypeConverter
+    fun fromFinancialType(value: FinancialType?): String? = value?.name
+
+    @TypeConverter
+    fun toFinancialType(value: String?): FinancialType? = value?.let { FinancialType.valueOf(it) }
 }

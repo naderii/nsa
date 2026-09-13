@@ -6,11 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [Reminder::class], version = 1, exportSchema = true)
+@Database(entities = [Reminder::class, PaymentLog::class], version = 3, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun reminderDao(): ReminderDao
+    abstract fun paymentLogDao(): PaymentLogDao
 
     companion object {
         @Volatile
@@ -22,7 +23,11 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "nsa.db"
-                ).build().also { INSTANCE = it }
+                )
+                    // TODO: replace with a real Migration before this ships to
+                    // anyone with data worth keeping. Fine during early dev.
+                    .fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
         }
     }

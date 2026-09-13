@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.ui.theme.CategoryColors
 import ir.naderinia.nsa.util.resolveContact
@@ -40,7 +41,8 @@ fun AddReminderScreen(
         repeatInterval: RepeatInterval,
         amount: Long?,
         counterparty: String?,
-        counterpartyPhone: String?
+        counterpartyPhone: String?,
+        financialType: FinancialType?
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -52,6 +54,7 @@ fun AddReminderScreen(
     var categoryColor by remember { mutableStateOf(CategoryColors.first()) }
     var repeatInterval by remember { mutableStateOf(RepeatInterval.NONE) }
     var isFinancial by remember { mutableStateOf(false) }
+    var financialType by remember { mutableStateOf(FinancialType.DEBT) }
     var amountText by remember { mutableStateOf("") }
     var counterparty by remember { mutableStateOf("") }
     var counterpartyPhone by remember { mutableStateOf<String?>(null) }
@@ -90,6 +93,7 @@ fun AddReminderScreen(
     val dateFormatter = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
     var repeatMenuExpanded by remember { mutableStateOf(false) }
+    var financialTypeMenuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("یادآوری جدید") }) }) { padding ->
         Column(
@@ -193,6 +197,33 @@ fun AddReminderScreen(
             }
 
             if (isFinancial) {
+                ExposedDropdownMenuBox(
+                    expanded = financialTypeMenuExpanded,
+                    onExpandedChange = { financialTypeMenuExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = financialType.persianLabel(),
+                        onValueChange = {},
+                        label = { Text("نوع مالی") },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = financialTypeMenuExpanded,
+                        onDismissRequest = { financialTypeMenuExpanded = false }
+                    ) {
+                        FinancialType.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.persianLabel()) },
+                                onClick = {
+                                    financialType = option
+                                    financialTypeMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it.filter { c -> c.isDigit() } },
@@ -235,7 +266,8 @@ fun AddReminderScreen(
                             repeatInterval,
                             if (isFinancial) amountText.toLongOrNull() else null,
                             if (isFinancial) counterparty.ifBlank { null } else null,
-                            if (isFinancial) counterpartyPhone else null
+                            if (isFinancial) counterpartyPhone else null,
+                            if (isFinancial) financialType else null
                         )
                     },
                     enabled = title.isNotBlank(),
@@ -257,4 +289,12 @@ private fun RepeatInterval.persianLabel(): String = when (this) {
     RepeatInterval.WEEKLY -> "هفتگی"
     RepeatInterval.MONTHLY -> "ماهانه"
     RepeatInterval.YEARLY -> "سالانه"
+}
+
+private fun FinancialType.persianLabel(): String = when (this) {
+    FinancialType.DEBT -> "بدهی من"
+    FinancialType.CREDIT -> "طلب من"
+    FinancialType.CHECK -> "چک"
+    FinancialType.INSTALLMENT -> "قسط یا وام"
+    FinancialType.BILL -> "قبض"
 }

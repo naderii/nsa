@@ -6,8 +6,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.Reminder
@@ -59,24 +63,58 @@ fun ReminderListScreen(
     onAddClick: () -> Unit,
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
-    onRecordPayment: (Reminder, Long) -> Unit
+    onRecordPayment: (Reminder, Long) -> Unit,
+    onFinancialClick: () -> Unit,
+    onDashboardClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("یادآوری‌های من") })
+            TopAppBar(
+                title = { Text("یادآوری‌های من") },
+                actions = {
+                    IconButton(onClick = onDashboardClick) {
+                        Icon(Icons.Default.Dashboard, contentDescription = "داشبورد روزانه")
+                    }
+                    IconButton(onClick = onFinancialClick) {
+                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = "مدیریت مالی")
+                    }
+                }
+            )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = "افزودن یادآوری")
-            }
+            ExtendedFloatingActionButton(
+                onClick = onAddClick,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("یادآوری جدید") }
+            )
         }
     ) { padding ->
         if (reminders.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("هنوز یادآوری‌ای ثبت نکردی. با دکمه‌ی + شروع کن.")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.EventAvailable,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "هنوز یادآوری‌ای ثبت نکردی",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "با دکمه‌ی پایین صفحه اولین یادآوریت رو بساز",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         } else {
             val grouped = reminders.groupBy { groupFor(it) }
@@ -135,6 +173,7 @@ private fun ReminderCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = if (isOverdue) {
             CardDefaults.cardColors(containerColor = Color(0xFFFDECEA))
         } else {

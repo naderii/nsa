@@ -32,6 +32,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ir.naderinia.nsa.ui.ReminderViewModel
 import ir.naderinia.nsa.ui.screens.AddReminderScreen
+import ir.naderinia.nsa.ui.screens.DashboardScreen
+import ir.naderinia.nsa.ui.screens.FinancialScreen
 import ir.naderinia.nsa.ui.screens.PermissionUiState
 import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
 import ir.naderinia.nsa.ui.screens.ReminderListScreen
@@ -114,6 +116,9 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val reminders by viewModel.reminders.collectAsState()
                 val knownCategories by viewModel.knownCategories.collectAsState()
+                val financialReminders by viewModel.financialReminders.collectAsState()
+                val financialSummary by viewModel.financialSummary.collectAsState()
+                val dashboardStats by viewModel.dashboardStats.collectAsState()
 
                 val startDestination = if (permissionItems.all { it.isGranted }) "list" else "onboarding"
 
@@ -138,15 +143,31 @@ class MainActivity : ComponentActivity() {
                             onAddClick = { navController.navigate("add") },
                             onToggleDone = { viewModel.toggleDone(it) },
                             onDelete = { viewModel.deleteReminder(it) },
-                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) }
+                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
+                            onFinancialClick = { navController.navigate("financial") },
+                            onDashboardClick = { navController.navigate("dashboard") }
+                        )
+                    }
+                    composable("dashboard") {
+                        DashboardScreen(
+                            stats = dashboardStats,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("financial") {
+                        FinancialScreen(
+                            reminders = financialReminders,
+                            summary = financialSummary,
+                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable("add") {
                         AddReminderScreen(
                             knownCategories = knownCategories,
-                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone ->
+                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType ->
                                 viewModel.addReminder(
-                                    title, note, category, color, trigger, repeat, amount, counterparty, phone
+                                    title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType
                                 )
                                 navController.popBackStack()
                             },
