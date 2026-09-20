@@ -13,8 +13,13 @@ android {
         applicationId = "ir.naderinia.nsa"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5.0"
+<<<<<<< HEAD
+        versionCode = 12
+        versionName = "0.12.0"
+=======
+        versionCode = 3
+        versionName = "0.3.0"
+>>>>>>> bfbd22d (version3)
     }
 
     buildTypes {
@@ -47,6 +52,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
@@ -71,7 +80,18 @@ dependencies {
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // App lock: PIN + biometric
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.2")
+
+    // On-device (free, no API key, works offline) text recognition for receipt scanning
+    implementation("com.google.mlkit:text-recognition:16.0.0")
+
+    // Lightweight image loading for displaying the captured receipt photo
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }
+

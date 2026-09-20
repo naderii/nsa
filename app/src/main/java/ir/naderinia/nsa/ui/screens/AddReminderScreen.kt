@@ -1,65 +1,326 @@
 package ir.naderinia.nsa.ui.screens
 
 import android.Manifest
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import coil.compose.rememberAsyncImagePainter
 import ir.naderinia.nsa.data.FinancialType
+import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
+import ir.naderinia.nsa.ui.components.JalaliDatePickerDialog
 import ir.naderinia.nsa.ui.theme.CategoryColors
+import ir.naderinia.nsa.util.BabyCareGuide
+import ir.naderinia.nsa.util.CarPrefs
+import ir.naderinia.nsa.util.JalaliCalendar
+import ir.naderinia.nsa.util.PregnancyGuide
 import ir.naderinia.nsa.util.resolveContact
-import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Calendar
-import java.util.Locale
+
+private enum class ReminderTemplate(
+val label: String,
+val fixedCategory: String?
+) {
+GENERAL("عمومی", null),
+CAR_SERVICE("سرویس خودرو", "ماشین"),
+MEETING("جلسه", "جلسات"),
+PROPERTY("ساختمان", "ساختمان"),
+FINANCIAL("مالی", "مالی"),
+BIRTHDAY("تولد و سالگرد", "تولد و سالگرد"),
+MEDICATION("دارو و ویتامین", "دارو"),
+PREGNANCY("بارداری", "بارداری"),
+BABY_CARE("نوزاد و کودک", "نوزاد و کودک")
+}
+
+private val CAR_SERVICE_BUILTIN_ITEMS = listOf(
+"تعویض روغن",
+"تعویض لاستیک",
+"باتری",
+"بیمه",
+"معاینه فنی",
+"سرویس دوره‌ای"
+)
+
+private val PROPERTY_BUILTIN_ITEMS = listOf(
+"سرویس کولر",
+"سرویس پکیج",
+"شارژ ساختمان",
+"تعمیرات",
+"بیمه ساختمان"
+)
+
+private val GENERAL_BUILTIN_CATEGORIES = listOf(
+"قرار ملاقات",
+"ورزش",
+"لیست خرید",
+"کارهای خانه",
+"عادت روزانه"
+)
+
+private val BABY_AGE_MONTHS = listOf(
+0,
+2,
+4,
+6,
+9,
+12,
+15,
+18,
+24
+)
+
+private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
+if (reminder == null) {
+return ReminderTemplate.GENERAL
+}
+
+return when {
+    reminder.mileageTargetKm != null ->
+        ReminderTemplate.CAR_SERVICE
+
+    reminder.location != null ->
+        ReminderTemplate.MEETING
+
+    reminder.financialType != null ->
+        ReminderTemplate.FINANCIAL
+
+    reminder.category == "ساختمان" ->
+        ReminderTemplate.PROPERTY
+
+    reminder.category == "تولد و سالگرد" ->
+        ReminderTemplate.BIRTHDAY
+
+    reminder.category == "دارو" ->
+        ReminderTemplate.MEDICATION
+
+    reminder.category == "بارداری" ->
+        ReminderTemplate.PREGNANCY
+
+    reminder.category == "نوزاد و کودک" ->
+        ReminderTemplate.BABY_CARE
+
+    else ->
+        ReminderTemplate.GENERAL
+}
+
+
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddReminderScreen(
-    knownCategories: List<String>,
-    onSave: (
-        title: String,
-        note: String,
-        category: String,
-        categoryColor: Long,
-        triggerAtMillis: Long,
-        repeatInterval: RepeatInterval,
-        amount: Long?,
-        counterparty: String?,
-        counterpartyPhone: String?,
-        financialType: FinancialType?
-    ) -> Unit,
-    onCancel: () -> Unit
+knownCategories: List<String>,
+knownItemsByCategory: Map<String, List<String>> = emptyMap(),
+editingReminder: Reminder? = null,
+onSave: (
+title: String,
+note: String,
+category: String,
+categoryColor: Long,
+triggerAtMillis: Long,
+repeatInterval: RepeatInterval,
+amount: Long?,
+counterparty: String?,
+counterpartyPhone: String?,
+financialType: FinancialType?,
+attachmentUri: String?,
+mileageTargetKm: Long?,
+location: String?
+) -> Unit,
+onCancel: () -> Unit
 ) {
-    val context = LocalContext.current
+val context = LocalContext.current
 
-    var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("عمومی") }
-    var categoryColor by remember { mutableStateOf(CategoryColors.first()) }
-    var repeatInterval by remember { mutableStateOf(RepeatInterval.NONE) }
-    var isFinancial by remember { mutableStateOf(false) }
-    var financialType by remember { mutableStateOf(FinancialType.DEBT) }
-    var amountText by remember { mutableStateOf("") }
-    var counterparty by remember { mutableStateOf("") }
-    var counterpartyPhone by remember { mutableStateOf<String?>(null) }
 
-    val pickContactLauncher = rememberLauncherForActivityResult(
+var template by remember(editingReminder) {
+    mutableStateOf(inferTemplate(editingReminder))
+}
+
+var title by remember(editingReminder) {
+    mutableStateOf(editingReminder?.title ?: "")
+}
+
+var note by remember(editingReminder) {
+    mutableStateOf(editingReminder?.note ?: "")
+}
+
+var category by remember(editingReminder) {
+    mutableStateOf(editingReminder?.category ?: "عمومی")
+}
+
+var categoryColor by remember(editingReminder) {
+    mutableStateOf(
+        editingReminder?.categoryColor ?: CategoryColors.first()
+    )
+}
+
+var repeatInterval by remember(editingReminder) {
+    mutableStateOf(
+        editingReminder?.repeatInterval ?: RepeatInterval.NONE
+    )
+}
+
+var financialType by remember(editingReminder) {
+    mutableStateOf(
+        editingReminder?.financialType ?: FinancialType.DEBT
+    )
+}
+
+var amountText by remember(editingReminder) {
+    mutableStateOf(editingReminder?.amount?.toString() ?: "")
+}
+
+var counterparty by remember(editingReminder) {
+    mutableStateOf(editingReminder?.counterparty ?: "")
+}
+
+var counterpartyPhone by remember(editingReminder) {
+    mutableStateOf(editingReminder?.counterpartyPhone)
+}
+
+var locationText by remember(editingReminder) {
+    mutableStateOf(editingReminder?.location ?: "")
+}
+
+var mileageCurrentText by remember(editingReminder) {
+    mutableStateOf(
+        CarPrefs.getCurrentKm(context).toString()
+    )
+}
+
+var mileageTargetText by remember(editingReminder) {
+    mutableStateOf(
+        editingReminder?.mileageTargetKm?.toString() ?: ""
+    )
+}
+
+var pregnancyMonth by remember(editingReminder) {
+    mutableStateOf(1)
+}
+
+var babyAgeMonth by remember(editingReminder) {
+    mutableStateOf(0)
+}
+
+var attachmentUri by remember(editingReminder) {
+    mutableStateOf(
+        editingReminder?.attachmentUri?.let(Uri::parse)
+    )
+}
+
+var pregnancyMenuExpanded by remember {
+    mutableStateOf(false)
+}
+
+var babyMenuExpanded by remember {
+    mutableStateOf(false)
+}
+
+var repeatMenuExpanded by remember {
+    mutableStateOf(false)
+}
+
+var financialTypeMenuExpanded by remember {
+    mutableStateOf(false)
+}
+
+var templateMenuExpanded by remember {
+    mutableStateOf(false)
+}
+
+var showJalaliDatePicker by remember {
+    mutableStateOf(false)
+}
+
+val calendar = remember(editingReminder) {
+    Calendar.getInstance().apply {
+        editingReminder?.let {
+            timeInMillis = it.triggerAtMillis
+        }
+    }
+}
+
+var triggerMillis by remember(editingReminder) {
+    mutableStateOf(calendar.timeInMillis)
+}
+
+val takeAttachmentPhotoLauncher =
+    rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (!success) {
+            attachmentUri = null
+        }
+    }
+
+val pickAttachmentFileLauncher =
+    rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: SecurityException) {
+            // بعضی Providerها اجازه Persist کردن URI را نمی‌دهند.
+            // خود URI همچنان برای استفاده فعلی قابل استفاده است.
+        }
+
+        attachmentUri = uri
+    }
+
+fun captureAttachmentPhoto() {
+    val directory = File(
+        context.filesDir,
+        "attachments"
+    ).apply {
+        mkdirs()
+    }
+
+    val file = File(
+        directory,
+        "attachment_${System.currentTimeMillis()}.jpg"
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file
+    )
+
+    attachmentUri = uri
+    takeAttachmentPhotoLauncher.launch(uri)
+}
+
+val pickContactLauncher =
+    rememberLauncherForActivityResult(
         ActivityResultContracts.PickContact()
     ) { uri ->
         uri?.let {
@@ -70,151 +331,510 @@ fun AddReminderScreen(
         }
     }
 
-    val requestContactsPermission = rememberLauncherForActivityResult(
+val requestContactsPermission =
+    rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) pickContactLauncher.launch(null)
-    }
-
-    fun pickFromContacts() {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.READ_CONTACTS
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (hasPermission) {
+        if (granted) {
             pickContactLauncher.launch(null)
-        } else {
-            requestContactsPermission.launch(Manifest.permission.READ_CONTACTS)
         }
     }
 
-    val calendar = remember { Calendar.getInstance() }
-    var triggerMillis by remember { mutableStateOf(calendar.timeInMillis) }
-    val dateFormatter = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+fun pickFromContacts() {
+    val hasPermission =
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
 
-    var repeatMenuExpanded by remember { mutableStateOf(false) }
-    var financialTypeMenuExpanded by remember { mutableStateOf(false) }
+    if (hasPermission) {
+        pickContactLauncher.launch(null)
+    } else {
+        requestContactsPermission.launch(
+            Manifest.permission.READ_CONTACTS
+        )
+    }
+}
 
-    Scaffold(topBar = { TopAppBar(title = { Text("یادآوری جدید") }) }) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+Scaffold(
+    topBar = {
+        TopAppBar(
+            title = {
+                Text(
+                    if (editingReminder != null) {
+                        "ویرایش یادآوری"
+                    } else {
+                        "یادآوری جدید"
+                    }
+                )
+            }
+        )
+    }
+) { paddingValues ->
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+
+        // ---------------------------------------------------------
+        // Title
+        // ---------------------------------------------------------
+
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = {
+                Text("عنوان")
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // ---------------------------------------------------------
+        // Template
+        // ---------------------------------------------------------
+
+        ExposedDropdownMenuBox(
+            expanded = templateMenuExpanded,
+            onExpandedChange = {
+                templateMenuExpanded = it
+            }
         ) {
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("عنوان") },
-                modifier = Modifier.fillMaxWidth()
+                readOnly = true,
+                value = template.label,
+                onValueChange = {},
+                label = {
+                    Text("نوع")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
             )
 
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                label = { Text("توضیحات (اختیاری)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            ExposedDropdownMenu(
+                expanded = templateMenuExpanded,
+                onDismissRequest = {
+                    templateMenuExpanded = false
+                }
+            ) {
+                ReminderTemplate.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(option.label)
+                        },
+                        onClick = {
+                            template = option
 
-            OutlinedTextField(
-                value = category,
-                onValueChange = { category = it },
-                label = { Text("دسته‌بندی") },
-                modifier = Modifier.fillMaxWidth()
-            )
+                            option.fixedCategory?.let {
+                                category = it
+                            }
 
-            if (knownCategories.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(knownCategories) { existingCategory ->
-                        AssistChip(
-                            onClick = { category = existingCategory },
-                            label = { Text(existingCategory) }
-                        )
+                            when (option) {
+                                ReminderTemplate.BIRTHDAY -> {
+                                    repeatInterval =
+                                        RepeatInterval.YEARLY
+                                }
+
+                                ReminderTemplate.MEDICATION -> {
+                                    repeatInterval =
+                                        RepeatInterval.DAILY
+                                }
+
+                                else -> Unit
+                            }
+
+                            templateMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // ---------------------------------------------------------
+        // Template-specific fields
+        // ---------------------------------------------------------
+
+        when (template) {
+
+            ReminderTemplate.GENERAL -> {
+
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = {
+                        category = it
+                    },
+                    label = {
+                        Text("دسته‌بندی")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val generalSuggestions =
+                    (
+                        GENERAL_BUILTIN_CATEGORIES +
+                            knownCategories
+                        ).distinct()
+
+                if (generalSuggestions.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(generalSuggestions) { existingCategory ->
+                            AssistChip(
+                                onClick = {
+                                    category = existingCategory
+                                },
+                                label = {
+                                    Text(existingCategory)
+                                }
+                            )
+                        }
                     }
                 }
             }
 
-            Button(onClick = {
-                DatePickerDialog(
-                    context,
-                    { _, year, month, day ->
-                        calendar.set(Calendar.YEAR, year)
-                        calendar.set(Calendar.MONTH, month)
-                        calendar.set(Calendar.DAY_OF_MONTH, day)
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute ->
-                                calendar.set(Calendar.HOUR_OF_DAY, hour)
-                                calendar.set(Calendar.MINUTE, minute)
-                                calendar.set(Calendar.SECOND, 0)
-                                triggerMillis = calendar.timeInMillis
-                            },
-                            calendar.get(Calendar.HOUR_OF_DAY),
-                            calendar.get(Calendar.MINUTE),
-                            true
-                        ).show()
-                    },
-                    calendar.get(Calendar.YEAR),
-                    calendar.get(Calendar.MONTH),
-                    calendar.get(Calendar.DAY_OF_MONTH)
-                ).show()
-            }) {
-                Text("انتخاب تاریخ و ساعت: ${dateFormatter.format(triggerMillis)}")
+            ReminderTemplate.BIRTHDAY -> {
+
+                Text(
+                    text = "تکرار روی «سالانه» تنظیم شد — هر سال همین روز بهت یادآوری می‌شه.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
-            ExposedDropdownMenuBox(
-                expanded = repeatMenuExpanded,
-                onExpandedChange = { repeatMenuExpanded = it }
-            ) {
-                OutlinedTextField(
-                    readOnly = true,
-                    value = repeatInterval.persianLabel(),
-                    onValueChange = {},
-                    label = { Text("تکرار") },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
+            ReminderTemplate.MEDICATION -> {
+
+                Text(
+                    text = "تکرار روی «روزانه» تنظیم شد — دوز یا نکات خاص رو توی توضیحات بنویس.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                ExposedDropdownMenu(
-                    expanded = repeatMenuExpanded,
-                    onDismissRequest = { repeatMenuExpanded = false }
+            }
+
+            ReminderTemplate.PREGNANCY -> {
+
+                ExposedDropdownMenuBox(
+                    expanded = pregnancyMenuExpanded,
+                    onExpandedChange = {
+                        pregnancyMenuExpanded = it
+                    }
                 ) {
-                    RepeatInterval.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.persianLabel()) },
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = "ماه $pregnancyMonth بارداری",
+                        onValueChange = {},
+                        label = {
+                            Text("ماه بارداری")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = pregnancyMenuExpanded,
+                        onDismissRequest = {
+                            pregnancyMenuExpanded = false
+                        }
+                    ) {
+                        (1..9).forEach { month ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text("ماه $month")
+                                },
+                                onClick = {
+                                    pregnancyMonth = month
+                                    pregnancyMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                val suggestions =
+                    PregnancyGuide
+                        .milestonesByMonth[pregnancyMonth]
+                        .orEmpty()
+
+                if (suggestions.isNotEmpty()) {
+                    Text(
+                        text = "پیشنهاد این ماه",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+
+                    LazyRow(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(suggestions) { item ->
+                            AssistChip(
+                                onClick = {
+                                    title = item
+                                },
+                                label = {
+                                    Text(item)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = PregnancyGuide.disclaimer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            ReminderTemplate.BABY_CARE -> {
+
+                ExposedDropdownMenuBox(
+                    expanded = babyMenuExpanded,
+                    onExpandedChange = {
+                        babyMenuExpanded = it
+                    }
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = if (babyAgeMonth == 0) {
+                            "بدو تولد"
+                        } else {
+                            "$babyAgeMonth ماهگی"
+                        },
+                        onValueChange = {},
+                        label = {
+                            Text("سن نوزاد")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = babyMenuExpanded,
+                        onDismissRequest = {
+                            babyMenuExpanded = false
+                        }
+                    ) {
+                        BABY_AGE_MONTHS.forEach { month ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (month == 0) {
+                                            "بدو تولد"
+                                        } else {
+                                            "$month ماهگی"
+                                        }
+                                    )
+                                },
+                                onClick = {
+                                    babyAgeMonth = month
+                                    babyMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                val suggestions =
+                    BabyCareGuide
+                        .milestonesByMonth[babyAgeMonth]
+                        .orEmpty()
+
+                if (suggestions.isNotEmpty()) {
+                    Text(
+                        text = "پیشنهاد این سن",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+
+                    LazyRow(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(suggestions) { item ->
+                            AssistChip(
+                                onClick = {
+                                    title = item
+                                },
+                                label = {
+                                    Text(item)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = BabyCareGuide.disclaimer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            ReminderTemplate.CAR_SERVICE -> {
+
+                val suggestions =
+                    (
+                        CAR_SERVICE_BUILTIN_ITEMS +
+                            knownItemsByCategory["ماشین"].orEmpty()
+                        ).distinct()
+
+                Text(
+                    text = "آیتم سرویس",
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                LazyRow(
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
+                ) {
+                    items(suggestions) { item ->
+                        AssistChip(
                             onClick = {
-                                repeatInterval = option
-                                repeatMenuExpanded = false
+                                title = item
+                            },
+                            label = {
+                                Text(item)
                             }
                         )
                     }
                 }
+
+                Row(
+                    horizontalArrangement =
+                        Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = mileageCurrentText,
+                        onValueChange = {
+                            mileageCurrentText =
+                                it.filter(Char::isDigit)
+                        },
+                        label = {
+                            Text("کیلومتر فعلی")
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    OutlinedTextField(
+                        value = mileageTargetText,
+                        onValueChange = {
+                            mileageTargetText =
+                                it.filter(Char::isDigit)
+                        },
+                        label = {
+                            Text("کیلومتر بعدی (هدف)")
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = {
+                        amountText =
+                            it.filter(Char::isDigit)
+                    },
+                    label = {
+                        Text("مبلغ (تومان، اختیاری)")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = isFinancial, onCheckedChange = { isFinancial = it })
-                Text("این یک یادآوری مالی است (مبلغ/بدهی/طلب)")
+            ReminderTemplate.MEETING -> {
+
+                OutlinedTextField(
+                    value = locationText,
+                    onValueChange = {
+                        locationText = it
+                    },
+                    label = {
+                        Text("محل برگزاری")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
-            if (isFinancial) {
+            ReminderTemplate.PROPERTY -> {
+
+                val suggestions =
+                    (
+                        PROPERTY_BUILTIN_ITEMS +
+                            knownItemsByCategory["ساختمان"].orEmpty()
+                        ).distinct()
+
+                Text(
+                    text = "آیتم",
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                LazyRow(
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
+                ) {
+                    items(suggestions) { item ->
+                        AssistChip(
+                            onClick = {
+                                title = item
+                            },
+                            label = {
+                                Text(item)
+                            }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = {
+                        amountText =
+                            it.filter(Char::isDigit)
+                    },
+                    label = {
+                        Text("مبلغ (تومان، اختیاری)")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            ReminderTemplate.FINANCIAL -> {
+
                 ExposedDropdownMenuBox(
                     expanded = financialTypeMenuExpanded,
-                    onExpandedChange = { financialTypeMenuExpanded = it }
+                    onExpandedChange = {
+                        financialTypeMenuExpanded = it
+                    }
                 ) {
                     OutlinedTextField(
                         readOnly = true,
                         value = financialType.persianLabel(),
                         onValueChange = {},
-                        label = { Text("نوع مالی") },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                        label = {
+                            Text("نوع مالی")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
                     )
+
                     ExposedDropdownMenu(
                         expanded = financialTypeMenuExpanded,
-                        onDismissRequest = { financialTypeMenuExpanded = false }
+                        onDismissRequest = {
+                            financialTypeMenuExpanded = false
+                        }
                     ) {
                         FinancialType.entries.forEach { option ->
                             DropdownMenuItem(
-                                text = { Text(option.persianLabel()) },
+                                text = {
+                                    Text(option.persianLabel())
+                                },
                                 onClick = {
                                     financialType = option
                                     financialTypeMenuExpanded = false
@@ -226,75 +846,417 @@ fun AddReminderScreen(
 
                 OutlinedTextField(
                     value = amountText,
-                    onValueChange = { amountText = it.filter { c -> c.isDigit() } },
-                    label = { Text("مبلغ (تومان)") },
+                    onValueChange = {
+                        amountText =
+                            it.filter(Char::isDigit)
+                    },
+                    label = {
+                        Text("مبلغ (تومان)")
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 OutlinedTextField(
                     value = counterparty,
                     onValueChange = {
                         counterparty = it
-                        counterpartyPhone = null // typed manually, no longer tied to a contact
+                        counterpartyPhone = null
                     },
-                    label = { Text("طرف حساب") },
+                    label = {
+                        Text("طرف حساب")
+                    },
                     trailingIcon = {
-                        IconButton(onClick = { pickFromContacts() }) {
-                            Icon(Icons.Default.Contacts, contentDescription = "انتخاب از مخاطبین")
+                        IconButton(
+                            onClick = {
+                                pickFromContacts()
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Contacts,
+                                contentDescription = "انتخاب از مخاطبین"
+                            )
                         }
                     },
                     supportingText = {
-                        if (counterpartyPhone != null) {
-                            Text("از مخاطبین: $counterpartyPhone")
+                        counterpartyPhone?.let {
+                            Text("از مخاطبین: $it")
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+
+        // ---------------------------------------------------------
+        // Note
+        // ---------------------------------------------------------
+
+        OutlinedTextField(
+            value = note,
+            onValueChange = {
+                note = it
+            },
+            label = {
+                Text("توضیحات (اختیاری)")
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // ---------------------------------------------------------
+        // Date & Time
+        // ---------------------------------------------------------
+
+        Button(
+            onClick = {
+                showJalaliDatePicker = true
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "انتخاب تاریخ و ساعت: " +
+                    JalaliCalendar.formatDateTime(triggerMillis)
+            )
+        }
+
+        if (showJalaliDatePicker) {
+
+            val current =
+                JalaliCalendar.millisToJalali(triggerMillis)
+
+            JalaliDatePickerDialog(
+                initialYear = current.year,
+                initialMonth = current.month,
+                initialDay = current.day,
+                onDismiss = {
+                    showJalaliDatePicker = false
+                },
+                onConfirm = { year, month, day ->
+
+                    showJalaliDatePicker = false
+
+                    val hour =
+                        calendar.get(Calendar.HOUR_OF_DAY)
+
+                    val minute =
+                        calendar.get(Calendar.MINUTE)
+
+                    TimePickerDialog(
+                        context,
+                        { _, selectedHour, selectedMinute ->
+
+                            triggerMillis =
+                                JalaliCalendar.jalaliToMillis(
+                                    year,
+                                    month,
+                                    day,
+                                    selectedHour,
+                                    selectedMinute
+                                )
+                        },
+                        hour,
+                        minute,
+                        true
+                    ).show()
+                }
+            )
+        }
+
+        // ---------------------------------------------------------
+        // Repeat
+        // ---------------------------------------------------------
+
+        ExposedDropdownMenuBox(
+            expanded = repeatMenuExpanded,
+            onExpandedChange = {
+                repeatMenuExpanded = it
+            }
+        ) {
+            OutlinedTextField(
+                readOnly = true,
+                value = repeatInterval.persianLabel(),
+                onValueChange = {},
+                label = {
+                    Text("تکرار")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = repeatMenuExpanded,
+                onDismissRequest = {
+                    repeatMenuExpanded = false
+                }
+            ) {
+                RepeatInterval.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(option.persianLabel())
+                        },
+                        onClick = {
+                            repeatInterval = option
+                            repeatMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // ---------------------------------------------------------
+        // Attachment
+        // ---------------------------------------------------------
+
+        Text(
+            text = "پیوست (اختیاری) — عکس یا سند",
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        attachmentUri?.let { uri ->
+
+            val isImage =
+                context.contentResolver
+                    .getType(uri)
+                    ?.startsWith("image/") == true ||
+                    uri.toString()
+                        .endsWith(".jpg", ignoreCase = true) ||
+                    uri.toString()
+                        .endsWith(".jpeg", ignoreCase = true) ||
+                    uri.toString()
+                        .endsWith(".png", ignoreCase = true) ||
+                    uri.toString()
+                        .endsWith(".webp", ignoreCase = true)
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = {
-                        onSave(
-                            title,
-                            note,
-                            category.ifBlank { "عمومی" },
-                            categoryColor,
-                            triggerMillis,
-                            repeatInterval,
-                            if (isFinancial) amountText.toLongOrNull() else null,
-                            if (isFinancial) counterparty.ifBlank { null } else null,
-                            if (isFinancial) counterpartyPhone else null,
-                            if (isFinancial) financialType else null
-                        )
-                    },
-                    enabled = title.isNotBlank(),
+
+                if (isImage) {
+                    Image(
+                        painter =
+                            rememberAsyncImagePainter(uri),
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector =
+                            Icons.AutoMirrored.Filled.InsertDriveFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier.width(8.dp)
+                )
+
+                Text(
+                    text = "پیوست اضافه شد",
                     modifier = Modifier.weight(1f)
+                )
+
+                IconButton(
+                    onClick = {
+                        attachmentUri = null
+                    }
                 ) {
-                    Text("ذخیره")
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "حذف پیوست"
+                    )
                 }
-                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                    Text("انصراف")
+            }
+
+        } ?: run {
+
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(12.dp)
+            ) {
+
+                OutlinedButton(
+                    onClick = {
+                        captureAttachmentPhoto()
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.AttachFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.width(4.dp)
+                    )
+
+                    Text("گرفتن عکس")
                 }
+
+                OutlinedButton(
+                    onClick = {
+                        pickAttachmentFileLauncher.launch(
+                            arrayOf(
+                                "image/*",
+                                "application/pdf"
+                            )
+                        )
+                    }
+                ) {
+                    Text("انتخاب فایل")
+                }
+            }
+        }
+
+        // ---------------------------------------------------------
+        // Save / Cancel
+        // ---------------------------------------------------------
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement =
+                Arrangement.spacedBy(12.dp)
+        ) {
+
+            Button(
+                onClick = {
+
+                    if (template ==
+                        ReminderTemplate.CAR_SERVICE
+                    ) {
+                        mileageCurrentText
+                            .toLongOrNull()
+                            ?.let {
+                                CarPrefs.setCurrentKm(
+                                    context,
+                                    it
+                                )
+                            }
+                    }
+
+                    val normalizedCategory =
+                        category.ifBlank { "عمومی" }
+
+                    val amount =
+                        if (
+                            template ==
+                            ReminderTemplate.FINANCIAL ||
+                            template ==
+                            ReminderTemplate.CAR_SERVICE ||
+                            template ==
+                            ReminderTemplate.PROPERTY
+                        ) {
+                            amountText.toLongOrNull()
+                        } else {
+                            null
+                        }
+
+                    val savedCounterparty =
+                        if (
+                            template ==
+                            ReminderTemplate.FINANCIAL
+                        ) {
+                            counterparty.ifBlank { null }
+                        } else {
+                            null
+                        }
+
+                    val savedCounterpartyPhone =
+                        if (
+                            template ==
+                            ReminderTemplate.FINANCIAL
+                        ) {
+                            counterpartyPhone
+                        } else {
+                            null
+                        }
+
+                    val savedFinancialType =
+                        if (
+                            template ==
+                            ReminderTemplate.FINANCIAL
+                        ) {
+                            financialType
+                        } else {
+                            null
+                        }
+
+                    val savedMileageTarget =
+                        if (
+                            template ==
+                            ReminderTemplate.CAR_SERVICE
+                        ) {
+                            mileageTargetText.toLongOrNull()
+                        } else {
+                            null
+                        }
+
+                    val savedLocation =
+                        if (
+                            template ==
+                            ReminderTemplate.MEETING
+                        ) {
+                            locationText.ifBlank { null }
+                        } else {
+                            null
+                        }
+
+                    onSave(
+                        title,
+                        note,
+                        normalizedCategory,
+                        categoryColor,
+                        triggerMillis,
+                        repeatInterval,
+                        amount,
+                        savedCounterparty,
+                        savedCounterpartyPhone,
+                        savedFinancialType,
+                        attachmentUri?.toString(),
+                        savedMileageTarget,
+                        savedLocation
+                    )
+                },
+                enabled = title.isNotBlank(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (editingReminder != null) {
+                        "به‌روزرسانی"
+                    } else {
+                        "ذخیره"
+                    }
+                )
+            }
+
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("انصراف")
             }
         }
     }
 }
 
-private fun RepeatInterval.persianLabel(): String = when (this) {
-    RepeatInterval.NONE -> "بدون تکرار"
-    RepeatInterval.DAILY -> "روزانه"
-    RepeatInterval.WEEKLY -> "هفتگی"
-    RepeatInterval.MONTHLY -> "ماهانه"
-    RepeatInterval.YEARLY -> "سالانه"
 }
 
-private fun FinancialType.persianLabel(): String = when (this) {
-    FinancialType.DEBT -> "بدهی من"
-    FinancialType.CREDIT -> "طلب من"
-    FinancialType.CHECK -> "چک"
-    FinancialType.INSTALLMENT -> "قسط یا وام"
-    FinancialType.BILL -> "قبض"
+private fun RepeatInterval.persianLabel(): String =
+when (this) {
+RepeatInterval.NONE -> "بدون تکرار"
+RepeatInterval.DAILY -> "روزانه"
+RepeatInterval.WEEKLY -> "هفتگی"
+RepeatInterval.MONTHLY -> "ماهانه"
+RepeatInterval.YEARLY -> "سالانه"
+}
+
+private fun FinancialType.persianLabel(): String =
+when (this) {
+FinancialType.DEBT -> "بدهی من"
+FinancialType.CREDIT -> "طلب من"
+FinancialType.CHECK -> "چک"
+FinancialType.INSTALLMENT -> "قسط یا وام"
+FinancialType.BILL -> "قبض"
 }
