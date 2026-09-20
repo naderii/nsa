@@ -1,15 +1,18 @@
 package ir.naderinia.nsa.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.*
@@ -18,15 +21,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.Reminder
-import java.text.SimpleDateFormat
+import ir.naderinia.nsa.ui.theme.onSuccessContainerColor
+import ir.naderinia.nsa.ui.theme.successContainerColor
+import ir.naderinia.nsa.util.CarPrefs
+import ir.naderinia.nsa.util.JalaliCalendar
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 private enum class ReminderGroup(val label: String) {
     OVERDUE("عقب‌افتاده"),
@@ -36,6 +41,9 @@ private enum class ReminderGroup(val label: String) {
     LATER("بعداً"),
     DONE("انجام‌شده")
 }
+
+/** Three-tier urgency used for card color-coding, independent of grouping. */
+private enum class Urgency { RED, YELLOW, GREEN, NEUTRAL }
 
 private fun isSameDay(a: Calendar, b: Calendar): Boolean =
     a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
@@ -56,104 +64,99 @@ private fun groupFor(reminder: Reminder): ReminderGroup {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Mileage overrun (car service due by km) always escalates to RED, even if the date is far away. */
+private fun urgencyFor(reminder: Reminder, group: ReminderGroup, currentKm: Long): Urgency {
+    if (reminder.isDone) return Urgency.NEUTRAL
+    val mileageDue = reminder.mileageTargetKm != null && currentKm >= reminder.mileageTargetKm
+    return when {
+        group == ReminderGroup.OVERDUE || mileageDue -> Urgency.RED
+        group == ReminderGroup.TODAY || group == ReminderGroup.TOMORROW -> Urgency.YELLOW
+        else -> Urgency.GREEN
+    }
+}
+
+/**
+ * Pure content — no Scaffold/TopAppBar/FAB of its own. This is embedded as
+ * a tab inside HomeScreen, which owns the single shared Scaffold (top bar +
+ * bottom nav bar + the "add" FAB).
+ */
 @Composable
-fun ReminderListScreen(
+fun ReminderListContent(
     reminders: List<Reminder>,
-    onAddClick: () -> Unit,
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit,
-    onFinancialClick: () -> Unit,
-    onDashboardClick: () -> Unit
+    onEdit: (Reminder) -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("یادآوری‌های من") },
-                actions = {
-                    IconButton(onClick = onDashboardClick) {
-                        Icon(Icons.Default.Dashboard, contentDescription = "داشبورد روزانه")
-                    }
-                    IconButton(onClick = onFinancialClick) {
-                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = "مدیریت مالی")
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddClick,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("یادآوری جدید") }
-            )
-        }
-    ) { padding ->
-        if (reminders.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.EventAvailable,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "هنوز یادآوری‌ای ثبت نکردی",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "با دکمه‌ی پایین صفحه اولین یادآوریت رو بساز",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        } else {
-            val grouped = reminders.groupBy { groupFor(it) }
-            val orderedGroups = listOf(
-                ReminderGroup.OVERDUE,
-                ReminderGroup.TODAY,
-                ReminderGroup.TOMORROW,
-                ReminderGroup.THIS_WEEK,
-                ReminderGroup.LATER,
-                ReminderGroup.DONE
-            )
+    val context = LocalContext.current
+    val currentKm = remember { CarPrefs.getCurrentKm(context) }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                orderedGroups.forEach { group ->
-                    val items = grouped[group].orEmpty()
-                    if (items.isNotEmpty()) {
-                        item(key = "header_${group.name}") {
-                            Text(
-                                text = group.label,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (group == ReminderGroup.OVERDUE) Color(0xFFC62828) else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(items, key = { it.id }) { reminder ->
-                            ReminderCard(
-                                reminder = reminder,
-                                isOverdue = group == ReminderGroup.OVERDUE,
-                                onToggleDone = onToggleDone,
-                                onDelete = onDelete,
-                                onRecordPayment = onRecordPayment
-                            )
-                        }
-                    }
+    if (reminders.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.EventAvailable,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "هنوز یادآوری‌ای ثبت نکردی",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "با دکمه‌ی پایین صفحه اولین یادآوریت رو بساز",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        return
+    }
+
+    val grouped = reminders.groupBy { groupFor(it) }
+    val orderedGroups = listOf(
+        ReminderGroup.OVERDUE,
+        ReminderGroup.TODAY,
+        ReminderGroup.TOMORROW,
+        ReminderGroup.THIS_WEEK,
+        ReminderGroup.LATER,
+        ReminderGroup.DONE
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        orderedGroups.forEach { group ->
+            val items = grouped[group].orEmpty()
+            if (items.isNotEmpty()) {
+                item(key = "header_${group.name}") {
+                    Text(
+                        text = group.label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (group == ReminderGroup.OVERDUE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+                items(items, key = { it.id }) { reminder ->
+                    ReminderCard(
+                        reminder = reminder,
+                        urgency = urgencyFor(reminder, group, currentKm),
+                        onToggleDone = onToggleDone,
+                        onDelete = onDelete,
+                        onRecordPayment = onRecordPayment,
+                        onEdit = onEdit
+                    )
                 }
             }
         }
@@ -163,22 +166,32 @@ fun ReminderListScreen(
 @Composable
 private fun ReminderCard(
     reminder: Reminder,
-    isOverdue: Boolean,
+    urgency: Urgency,
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
-    onRecordPayment: (Reminder, Long) -> Unit
+    onRecordPayment: (Reminder, Long) -> Unit,
+    onEdit: (Reminder) -> Unit
 ) {
-    val formatter = remember(reminder.id) { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+    val context = LocalContext.current
     var showPaymentDialog by remember { mutableStateOf(false) }
+
+    val containerColor = when (urgency) {
+        Urgency.RED -> MaterialTheme.colorScheme.errorContainer
+        Urgency.YELLOW -> MaterialTheme.colorScheme.tertiaryContainer
+        Urgency.GREEN -> successContainerColor()
+        Urgency.NEUTRAL -> MaterialTheme.colorScheme.surface
+    }
+    val onContainerColor = when (urgency) {
+        Urgency.RED -> MaterialTheme.colorScheme.onErrorContainer
+        Urgency.YELLOW -> MaterialTheme.colorScheme.onTertiaryContainer
+        Urgency.GREEN -> onSuccessContainerColor()
+        Urgency.NEUTRAL -> Color.Unspecified
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = if (isOverdue) {
-            CardDefaults.cardColors(containerColor = Color(0xFFFDECEA))
-        } else {
-            CardDefaults.cardColors()
-        }
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Column {
             Row(
@@ -193,16 +206,47 @@ private fun ReminderCard(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = reminder.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = onContainerColor,
+                            textDecoration = if (reminder.isDone) TextDecoration.LineThrough else null
+                        )
+                        if (reminder.attachmentUri != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = { openAttachment(context, reminder.attachmentUri) },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.AttachFile,
+                                    contentDescription = "باز کردن پیوست",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                     Text(
-                        text = reminder.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (isOverdue) Color(0xFFC62828) else Color.Unspecified,
-                        textDecoration = if (reminder.isDone) TextDecoration.LineThrough else null
-                    )
-                    Text(
-                        text = "${reminder.category} • ${formatter.format(Date(reminder.triggerAtMillis))}",
+                        text = "${reminder.category} • ${JalaliCalendar.formatDateTime(reminder.triggerAtMillis)}",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    if (reminder.mileageTargetKm != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsCar, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "کیلومتر هدف: ${reminder.mileageTargetKm}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    if (reminder.location != null) {
+                        Text(
+                            text = "📍 ${reminder.location}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     if (reminder.amount != null) {
                         val remaining = reminder.amount - reminder.amountPaid
                         val financialLine = buildString {
@@ -216,12 +260,15 @@ private fun ReminderCard(
                     }
                 }
                 Checkbox(checked = reminder.isDone, onCheckedChange = { onToggleDone(reminder) })
+                IconButton(onClick = { onEdit(reminder) }) {
+                    Icon(Icons.Default.Edit, contentDescription = "ویرایش")
+                }
                 IconButton(onClick = { onDelete(reminder) }) {
                     Icon(Icons.Default.Delete, contentDescription = "حذف")
                 }
             }
 
-            if (reminder.amount != null && !reminder.isDone) {
+            if (reminder.financialType != null && !reminder.isDone) {
                 TextButton(
                     onClick = { showPaymentDialog = true },
                     modifier = Modifier.align(Alignment.End).padding(end = 8.dp, bottom = 4.dp)
@@ -243,6 +290,21 @@ private fun ReminderCard(
                 showPaymentDialog = false
             }
         )
+    }
+}
+
+private fun openAttachment(context: android.content.Context, uriString: String) {
+    try {
+        val uri = Uri.parse(uriString)
+        val mime = context.contentResolver.getType(uri) ?: "*/*"
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "برنامه‌ای برای باز کردن این فایل پیدا نشد", Toast.LENGTH_SHORT).show()
     }
 }
 

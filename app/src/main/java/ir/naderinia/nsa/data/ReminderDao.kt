@@ -26,7 +26,7 @@ interface ReminderDao {
     @Query("SELECT DISTINCT category FROM reminders ORDER BY category ASC")
     fun observeCategories(): Flow<List<String>>
 
-    @Query("SELECT * FROM reminders WHERE amount IS NOT NULL ORDER BY triggerAtMillis ASC")
+    @Query("SELECT * FROM reminders WHERE financialType IS NOT NULL ORDER BY triggerAtMillis ASC")
     fun observeFinancial(): Flow<List<Reminder>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

@@ -13,13 +13,8 @@ android {
         applicationId = "ir.naderinia.nsa"
         minSdk = 26
         targetSdk = 34
-<<<<<<< HEAD
-        versionCode = 12
-        versionName = "0.12.0"
-=======
-        versionCode = 3
-        versionName = "0.3.0"
->>>>>>> bfbd22d (version3)
+        versionCode = 13
+        versionName = "0.12.1"
     }
 
     buildTypes {
@@ -50,10 +45,6 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-}
-
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -94,4 +85,3 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }
-

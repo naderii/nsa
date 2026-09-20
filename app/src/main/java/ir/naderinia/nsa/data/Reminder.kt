@@ -37,5 +37,18 @@ data class Reminder(
     val counterparty: String? = null,  // who owes / is owed
     val counterpartyPhone: String? = null,
     val amountPaid: Long = 0,
-    val financialType: FinancialType? = null // null when amount is null (not a financial reminder)
+    val financialType: FinancialType? = null, // null when amount is null (not a financial reminder)
+
+    // URI (content:// or a file:// under our own storage) of an attached
+    // photo or document — contract, warranty, insurance card, ID, receipt.
+    val attachmentUri: String? = null,
+
+    // Optional odometer reading (km) at which this service is due, e.g.
+    // "next oil change at 52000 km". Independent of triggerAtMillis — a
+    // car-service reminder can be due by date OR by mileage, whichever
+    // comes first, so both fields are checked.
+    val mileageTargetKm: Long? = null,
+
+    // Where a meeting/appointment takes place.
+    val location: String? = null
 )

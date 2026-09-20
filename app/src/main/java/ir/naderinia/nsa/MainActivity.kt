@@ -7,17 +7,19 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,33 +27,66 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import ir.naderinia.nsa.data.FinancialType
+import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.ui.ReminderViewModel
 import ir.naderinia.nsa.ui.screens.AddReminderScreen
-import ir.naderinia.nsa.ui.screens.DashboardScreen
-import ir.naderinia.nsa.ui.screens.FinancialScreen
-import ir.naderinia.nsa.ui.screens.PermissionUiState
+import ir.naderinia.nsa.ui.screens.CategoryDetailScreen
+import ir.naderinia.nsa.ui.screens.HomeScreen
+import ir.naderinia.nsa.ui.screens.LockScreen
 import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
-import ir.naderinia.nsa.ui.screens.ReminderListScreen
+import ir.naderinia.nsa.ui.screens.PermissionUiState
+import ir.naderinia.nsa.ui.screens.ScanReceiptScreen
+import ir.naderinia.nsa.ui.screens.SecuritySettingsScreen
 import ir.naderinia.nsa.ui.theme.NsaTheme
 import ir.naderinia.nsa.util.PermissionStatus
+import ir.naderinia.nsa.util.SecurityPrefs
+import java.util.Calendar
 
-class MainActivity : ComponentActivity() {
+private sealed class ReminderDetailFilter {
+    object Today : ReminderDetailFilter()
+    object Overdue : ReminderDetailFilter()
+    data class Category(val name: String) : ReminderDetailFilter()
+}
+
+/**
+ * Extends FragmentActivity (not plain ComponentActivity) because
+ * androidx.biometric.BiometricPrompt requires a FragmentActivity host.
+ * FragmentActivity is itself a ComponentActivity subclass, so Compose's
+ * setContent still works exactly the same.
+ */
+class MainActivity : FragmentActivity() {
 
     private val viewModel: ReminderViewModel by viewModels()
+
+    companion object {
+        const val EXTRA_NAVIGATE_TO_ADD = "navigate_to_add"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             NsaTheme {
+                // ---- Permission onboarding state ----
                 var notifGranted by remember { mutableStateOf(PermissionStatus.hasNotificationPermission(this)) }
                 var exactAlarmGranted by remember { mutableStateOf(PermissionStatus.canScheduleExactAlarms(this)) }
                 var batteryExempt by remember { mutableStateOf(PermissionStatus.isIgnoringBatteryOptimizations(this)) }
+
+                // ---- App-lock state ----
+                var isUnlocked by remember { mutableStateOf(!SecurityPrefs.isLockEnabled(this)) }
+                var lockError by remember { mutableStateOf<String?>(null) }
+                val biometricAvailable = remember {
+                    BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+                        BiometricManager.BIOMETRIC_SUCCESS
+                }
 
                 // Battery/exact-alarm grants happen in system Settings screens, not
                 // through registerForActivityResult callbacks, so we re-check every
@@ -116,11 +151,44 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val reminders by viewModel.reminders.collectAsState()
                 val knownCategories by viewModel.knownCategories.collectAsState()
+                val knownItemsByCategory by viewModel.knownItemsByCategory.collectAsState()
                 val financialReminders by viewModel.financialReminders.collectAsState()
                 val financialSummary by viewModel.financialSummary.collectAsState()
                 val dashboardStats by viewModel.dashboardStats.collectAsState()
+                var editingReminder by remember { mutableStateOf<ir.naderinia.nsa.data.Reminder?>(null) }
+                var detailFilter by remember { mutableStateOf<ReminderDetailFilter?>(null) }
 
-                val startDestination = if (permissionItems.all { it.isGranted }) "list" else "onboarding"
+                // Opened from the home-screen widget's "quick add" button.
+                LaunchedEffect(isUnlocked) {
+                    if (isUnlocked && intent?.getBooleanExtra(EXTRA_NAVIGATE_TO_ADD, false) == true) {
+                        navController.navigate("add")
+                        intent.removeExtra(EXTRA_NAVIGATE_TO_ADD)
+                    }
+                }
+
+                if (!isUnlocked) {
+                    LockScreen(
+                        error = lockError,
+                        showBiometricButton = biometricAvailable && SecurityPrefs.isBiometricEnabled(this),
+                        onPinEntered = { pin ->
+                            if (SecurityPrefs.verifyPin(this, pin)) {
+                                lockError = null
+                                isUnlocked = true
+                            } else {
+                                lockError = "رمز اشتباهه"
+                            }
+                        },
+                        onBiometricClick = {
+                            showBiometricPrompt(onSuccess = {
+                                lockError = null
+                                isUnlocked = true
+                            })
+                        }
+                    )
+                    return@NsaTheme
+                }
+
+                val startDestination = if (permissionItems.all { it.isGranted }) "home" else "onboarding"
 
                 NavHost(
                     navController = navController,
@@ -131,52 +199,141 @@ class MainActivity : ComponentActivity() {
                         PermissionOnboardingScreen(
                             permissions = permissionItems,
                             onContinue = {
-                                navController.navigate("list") {
+                                navController.navigate("home") {
                                     popUpTo("onboarding") { inclusive = true }
                                 }
                             }
                         )
                     }
-                    composable("list") {
-                        ReminderListScreen(
+                    composable("home") {
+                        HomeScreen(
                             reminders = reminders,
-                            onAddClick = { navController.navigate("add") },
+                            financialReminders = financialReminders,
+                            financialSummary = financialSummary,
+                            dashboardStats = dashboardStats,
+                            onAddClick = {
+                                editingReminder = null
+                                navController.navigate("add")
+                            },
+                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
+                            onScanClick = { navController.navigate("scan") },
+                            onSecurityClick = { navController.navigate("security") },
+                            onOpenToday = {
+                                detailFilter = ReminderDetailFilter.Today
+                                navController.navigate("categoryDetail")
+                            },
+                            onOpenOverdue = {
+                                detailFilter = ReminderDetailFilter.Overdue
+                                navController.navigate("categoryDetail")
+                            },
+                            onOpenCategory = { category ->
+                                detailFilter = ReminderDetailFilter.Category(category)
+                                navController.navigate("categoryDetail")
+                            }
+                        )
+                    }
+                    composable("categoryDetail") {
+                        val filter = detailFilter
+                        val (detailTitle, detailReminders) = when (filter) {
+                            is ReminderDetailFilter.Today -> "امروز" to dashboardStats.todayItems
+                            is ReminderDetailFilter.Overdue -> "عقب‌افتاده" to dashboardStats.overdueItems
+                            is ReminderDetailFilter.Category -> filter.name to reminders.filter { it.category == filter.name }
+                            null -> "" to emptyList()
+                        }
+                        CategoryDetailScreen(
+                            title = detailTitle,
+                            reminders = detailReminders,
                             onToggleDone = { viewModel.toggleDone(it) },
                             onDelete = { viewModel.deleteReminder(it) },
                             onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
-                            onFinancialClick = { navController.navigate("financial") },
-                            onDashboardClick = { navController.navigate("dashboard") }
-                        )
-                    }
-                    composable("dashboard") {
-                        DashboardScreen(
-                            stats = dashboardStats,
+                            onEdit = { reminder ->
+                                editingReminder = reminder
+                                navController.navigate("add")
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }
-                    composable("financial") {
-                        FinancialScreen(
-                            reminders = financialReminders,
-                            summary = financialSummary,
-                            onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
+                    composable("security") {
+                        SecuritySettingsScreen(
+                            biometricAvailable = biometricAvailable,
                             onBack = { navController.popBackStack() }
                         )
                     }
-                    composable("add") {
-                        AddReminderScreen(
-                            knownCategories = knownCategories,
-                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType ->
+                    composable("scan") {
+                        ScanReceiptScreen(
+                            onSave = { title, amount, counterparty ->
+                                // Default the reminder to today at 9 AM since OCR
+                                // can't reliably read a Persian due date off the
+                                // receipt — the person can edit it later from the list.
+                                val trigger = Calendar.getInstance().apply {
+                                    set(Calendar.HOUR_OF_DAY, 9)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                }.timeInMillis
                                 viewModel.addReminder(
-                                    title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType
+                                    title = title,
+                                    note = "ثبت‌شده از اسکن رسید",
+                                    category = "قبض",
+                                    categoryColor = 0xFFF59E0B,
+                                    triggerAtMillis = trigger,
+                                    repeatInterval = RepeatInterval.NONE,
+                                    amount = amount,
+                                    counterparty = counterparty.ifBlank { null },
+                                    financialType = FinancialType.BILL
                                 )
                                 navController.popBackStack()
                             },
                             onCancel = { navController.popBackStack() }
                         )
                     }
+                    composable("add") {
+                        AddReminderScreen(
+                            knownCategories = knownCategories,
+                            knownItemsByCategory = knownItemsByCategory,
+                            editingReminder = editingReminder,
+                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location ->
+                                val current = editingReminder
+                                if (current != null) {
+                                    viewModel.updateReminder(
+                                        current.id, title, note, category, color, trigger, repeat,
+                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location
+                                    )
+                                } else {
+                                    viewModel.addReminder(
+                                        title, note, category, color, trigger, repeat,
+                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location
+                                    )
+                                }
+                                editingReminder = null
+                                navController.popBackStack()
+                            },
+                            onCancel = {
+                                editingReminder = null
+                                navController.popBackStack()
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private fun showBiometricPrompt(onSuccess: () -> Unit) {
+        val executor = ContextCompat.getMainExecutor(this)
+        val biometricPrompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onSuccess()
+                }
+            }
+        )
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("ورود به یادآور من")
+            .setNegativeButtonText("استفاده از رمز")
+            .build()
+        biometricPrompt.authenticate(promptInfo)
     }
 
     /**

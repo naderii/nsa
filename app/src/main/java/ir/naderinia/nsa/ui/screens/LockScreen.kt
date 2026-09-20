@@ -58,10 +58,7 @@ fun LockScreen(
                         row.forEach { key ->
                             when {
                                 key == "⌫" -> IconButton(onClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) }) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Backspace,
-                                        contentDescription = "پاک کردن"
-                                    )
+                                    Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "پاک کردن")
                                 }
                                 key.isEmpty() -> Spacer(modifier = Modifier.size(56.dp))
                                 else -> OutlinedButton(

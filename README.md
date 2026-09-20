@@ -19,6 +19,10 @@
 
 **فاز ۳ (بعدی):** بکاپ ابری Firebase، ویجت صفحه اصلی
 
+## فونت
+
+متن‌های فارسی اپ با فونت **[Vazirmatn](https://github.com/rastikerdar/vazirmatn)** رندر می‌شن (لایسنس SIL Open Font License 1.1 — رایگان و آزاد برای استفاده تجاری، فایل کامل لایسنس در `VAZIRMATN_LICENSE.txt`).
+
 ## معماری فنی
 
 - **زبان:** Kotlin

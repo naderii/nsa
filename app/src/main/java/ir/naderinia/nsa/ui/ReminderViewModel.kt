@@ -9,6 +9,7 @@ import ir.naderinia.nsa.data.PaymentLog
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.notification.NotificationScheduler
+import ir.naderinia.nsa.widget.NsaWidgetProvider
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -56,6 +57,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     val knownCategories: StateFlow<List<String>> = dao.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Previously used titles, grouped by category — powers the "آیتم" suggestion
+     * chips per template (e.g. category "ماشین" → "تعویض روغن", "تعویض لاستیک"...). */
+    val knownItemsByCategory: StateFlow<Map<String, List<String>>> = dao.observeAll()
+        .map { list ->
+            list.groupBy { it.category }.mapValues { (_, items) -> items.map { it.title }.distinct() }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val financialReminders: StateFlow<List<Reminder>> = dao.observeFinancial()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -84,7 +93,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         val overdue = allReminders.filter { !it.isDone && it.triggerAtMillis < now }
         val sevenDaysMillis = 7L * 24 * 60 * 60 * 1000
         val upcomingPayments = allReminders.filter {
-            it.amount != null && !it.isDone &&
+            it.financialType != null && !it.isDone &&
                 it.triggerAtMillis in now..(now + sevenDaysMillis)
         }
 
@@ -124,7 +133,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         amount: Long? = null,
         counterparty: String? = null,
         counterpartyPhone: String? = null,
-        financialType: FinancialType? = null
+        financialType: FinancialType? = null,
+        attachmentUri: String? = null,
+        mileageTargetKm: Long? = null,
+        location: String? = null
     ) {
         viewModelScope.launch {
             val reminder = Reminder(
@@ -137,10 +149,61 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 amount = amount,
                 counterparty = counterparty,
                 counterpartyPhone = counterpartyPhone,
-                financialType = financialType
+                financialType = financialType,
+                attachmentUri = attachmentUri,
+                mileageTargetKm = mileageTargetKm,
+                location = location
             )
             val id = dao.upsert(reminder)
             NotificationScheduler.schedule(getApplication(), reminder.copy(id = id))
+            NsaWidgetProvider.updateAll(getApplication())
+        }
+    }
+
+    /**
+     * Updates an existing reminder in place (same id), keeping its current
+     * isDone/amountPaid state, and reschedules its alarm since the date or
+     * repeat interval may have changed.
+     */
+    fun updateReminder(
+        id: Long,
+        title: String,
+        note: String,
+        category: String,
+        categoryColor: Long,
+        triggerAtMillis: Long,
+        repeatInterval: RepeatInterval,
+        amount: Long?,
+        counterparty: String?,
+        counterpartyPhone: String?,
+        financialType: FinancialType?,
+        attachmentUri: String?,
+        mileageTargetKm: Long?,
+        location: String?
+    ) {
+        viewModelScope.launch {
+            val existing = dao.getById(id) ?: return@launch
+            val updated = existing.copy(
+                title = title,
+                note = note,
+                category = category,
+                categoryColor = categoryColor,
+                triggerAtMillis = triggerAtMillis,
+                repeatInterval = repeatInterval,
+                amount = amount,
+                counterparty = counterparty,
+                counterpartyPhone = counterpartyPhone,
+                financialType = financialType,
+                attachmentUri = attachmentUri,
+                mileageTargetKm = mileageTargetKm,
+                location = location
+            )
+            dao.update(updated)
+            NotificationScheduler.cancel(getApplication(), id)
+            if (!updated.isDone) {
+                NotificationScheduler.schedule(getApplication(), updated)
+            }
+            NsaWidgetProvider.updateAll(getApplication())
         }
     }
 
@@ -148,12 +211,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             NotificationScheduler.cancel(getApplication(), reminder.id)
             dao.delete(reminder)
+            NsaWidgetProvider.updateAll(getApplication())
         }
     }
 
     fun toggleDone(reminder: Reminder) {
         viewModelScope.launch {
             dao.update(reminder.copy(isDone = !reminder.isDone))
+            NsaWidgetProvider.updateAll(getApplication())
         }
     }
 
@@ -172,6 +237,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             if (fullyPaid) {
                 NotificationScheduler.cancel(getApplication(), reminder.id)
             }
+            NsaWidgetProvider.updateAll(getApplication())
         }
     }
 }
