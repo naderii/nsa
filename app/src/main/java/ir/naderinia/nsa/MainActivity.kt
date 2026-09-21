@@ -39,6 +39,7 @@ import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.notification.NotificationHelper
 import ir.naderinia.nsa.ui.ReminderViewModel
+import ir.naderinia.nsa.ui.screens.AboutScreen
 import ir.naderinia.nsa.ui.screens.AddReminderScreen
 import ir.naderinia.nsa.ui.screens.CategoryDetailScreen
 import ir.naderinia.nsa.ui.screens.HomeScreen
@@ -47,7 +48,10 @@ import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
 import ir.naderinia.nsa.ui.screens.PermissionUiState
 import ir.naderinia.nsa.ui.screens.ScanReceiptScreen
 import ir.naderinia.nsa.ui.screens.SecuritySettingsScreen
+import ir.naderinia.nsa.ui.screens.WhatsNewScreen
 import ir.naderinia.nsa.ui.theme.NsaTheme
+import ir.naderinia.nsa.util.Changelog
+import ir.naderinia.nsa.util.ChangelogPrefs
 import ir.naderinia.nsa.util.PermissionStatus
 import ir.naderinia.nsa.util.SecurityPrefs
 import java.util.Calendar
@@ -207,7 +211,14 @@ class MainActivity : FragmentActivity() {
                     return@NsaTheme
                 }
 
-                val startDestination = if (permissionItems.all { it.isGranted }) "home" else "onboarding"
+                val pendingChangelog = remember {
+                    Changelog.since(ChangelogPrefs.getLastSeenVersion(this))
+                }
+                val startDestination = when {
+                    !permissionItems.all { it.isGranted } -> "onboarding"
+                    pendingChangelog.isNotEmpty() -> "whatsnew"
+                    else -> "home"
+                }
 
                 NavHost(
                     navController = navController,
@@ -218,10 +229,32 @@ class MainActivity : FragmentActivity() {
                         PermissionOnboardingScreen(
                             permissions = permissionItems,
                             onContinue = {
-                                navController.navigate("home") {
+                                val next = if (pendingChangelog.isNotEmpty()) "whatsnew" else "home"
+                                navController.navigate(next) {
                                     popUpTo("onboarding") { inclusive = true }
                                 }
                             }
+                        )
+                    }
+                    composable("whatsnew") {
+                        WhatsNewScreen(
+                            entries = pendingChangelog,
+                            onDismiss = {
+                                ChangelogPrefs.setLastSeenVersion(this@MainActivity, BuildConfig.VERSION_CODE)
+                                navController.navigate("home") {
+                                    popUpTo("whatsnew") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                    composable("about") {
+                        AboutScreen(
+                            versionName = BuildConfig.VERSION_NAME,
+                            versionCode = BuildConfig.VERSION_CODE,
+                            onShowChangelog = {
+                                navController.navigate("whatsnew")
+                            },
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable("home") {
@@ -238,6 +271,7 @@ class MainActivity : FragmentActivity() {
                             onScanClick = { navController.navigate("scan") },
                             onSecurityClick = { navController.navigate("security") },
                             onSoundClick = { openRingtonePicker() },
+                            onAboutClick = { navController.navigate("about") },
                             onOpenToday = {
                                 detailFilter = ReminderDetailFilter.Today
                                 navController.navigate("categoryDetail")

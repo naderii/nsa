@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
@@ -41,6 +42,7 @@ fun HomeScreen(
     onScanClick: () -> Unit,
     onSecurityClick: () -> Unit,
     onSoundClick: () -> Unit,
+    onAboutClick: () -> Unit,
     onOpenToday: () -> Unit,
     onOpenOverdue: () -> Unit,
     onOpenCategory: (String) -> Unit
@@ -80,6 +82,14 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onSoundClick()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("درباره‌ی اپ") },
+                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAboutClick()
                                 }
                             )
                         }

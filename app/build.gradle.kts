@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,17 +16,48 @@ android {
         applicationId = "ir.naderinia.nsa"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "0.14.0"
+        versionCode = 16
+        versionName = "0.15.0"
+    }
+
+    // Reads signing secrets from keystore.properties, a file that never gets
+    // committed to git (see .gitignore). This keeps the actual store/key
+    // passwords out of version control entirely — only you have them, on
+    // your own machine. See RELEASE.md for how to generate the keystore and
+    // this properties file.
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    val hasSigningConfig = keystorePropertiesFile.exists()
+    if (hasSigningConfig) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    }
+
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Without hasSigningConfig, a release build still compiles (useful
+            // to sanity-check R8 locally) but produces an unsigned artifact —
+            // Gradle will refuse to let you install/publish it until you add
+            // keystore.properties, which is the intended safety net.
         }
     }
 
@@ -38,6 +72,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
