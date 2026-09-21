@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PregnantWoman
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
@@ -36,7 +37,8 @@ private val CATEGORY_TILES = listOf(
     CategoryTile("تولد و سالگرد", "تولد و سالگرد", Icons.Default.Cake),
     CategoryTile("دارو", "دارو", Icons.Default.Medication),
     CategoryTile("بارداری", "بارداری", Icons.Default.PregnantWoman),
-    CategoryTile("نوزاد و کودک", "نوزاد و کودک", Icons.Default.ChildCare)
+    CategoryTile("نوزاد و کودک", "نوزاد و کودک", Icons.Default.ChildCare),
+    CategoryTile("مذهبی", "مذهبی", Icons.Default.MenuBook)
 )
 
 @Composable

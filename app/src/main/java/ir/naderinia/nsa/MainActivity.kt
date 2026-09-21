@@ -2,6 +2,7 @@ package ir.naderinia.nsa
 
 import android.Manifest
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -36,6 +37,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.RepeatInterval
+import ir.naderinia.nsa.notification.NotificationHelper
 import ir.naderinia.nsa.ui.ReminderViewModel
 import ir.naderinia.nsa.ui.screens.AddReminderScreen
 import ir.naderinia.nsa.ui.screens.CategoryDetailScreen
@@ -107,6 +109,23 @@ class MainActivity : FragmentActivity() {
                 val requestNotificationPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
                 ) { granted -> notifGranted = granted }
+
+                val ringtonePickerLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                    NotificationHelper.setCustomSound(this, uri)
+                }
+
+                fun openRingtonePicker() {
+                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "انتخاب آهنگ هشدار")
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, NotificationHelper.currentSoundUri(this@MainActivity))
+                    }
+                    ringtonePickerLauncher.launch(intent)
+                }
 
                 val permissionItems = buildList {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -218,6 +237,7 @@ class MainActivity : FragmentActivity() {
                             onRecordPayment = { reminder, amount -> viewModel.recordPayment(reminder, amount) },
                             onScanClick = { navController.navigate("scan") },
                             onSecurityClick = { navController.navigate("security") },
+                            onSoundClick = { openRingtonePicker() },
                             onOpenToday = {
                                 detailFilter = ReminderDetailFilter.Today
                                 navController.navigate("categoryDetail")
@@ -291,17 +311,17 @@ class MainActivity : FragmentActivity() {
                             knownCategories = knownCategories,
                             knownItemsByCategory = knownItemsByCategory,
                             editingReminder = editingReminder,
-                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location ->
+                            onSave = { title, note, category, color, trigger, repeat, amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location, bankName, repeatDaysOfWeek ->
                                 val current = editingReminder
                                 if (current != null) {
                                     viewModel.updateReminder(
                                         current.id, title, note, category, color, trigger, repeat,
-                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location
+                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location, bankName, repeatDaysOfWeek
                                     )
                                 } else {
                                     viewModel.addReminder(
                                         title, note, category, color, trigger, repeat,
-                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location
+                                        amount, counterparty, phone, financialType, attachmentUri, mileageTargetKm, location, bankName, repeatDaysOfWeek
                                     )
                                 }
                                 editingReminder = null

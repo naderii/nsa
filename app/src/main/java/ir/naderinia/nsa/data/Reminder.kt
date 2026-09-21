@@ -50,5 +50,13 @@ data class Reminder(
     val mileageTargetKm: Long? = null,
 
     // Where a meeting/appointment takes place.
-    val location: String? = null
+    val location: String? = null,
+
+    // Bank/institution name — relevant for checks and installments/loans.
+    val bankName: String? = null,
+
+    // Comma-separated java.util.Calendar.DAY_OF_WEEK values (1=Sunday..7=Saturday),
+    // used only when repeatInterval == WEEKLY. Null/blank means "repeat on
+    // whatever day the original triggerAtMillis falls on" (old behavior).
+    val repeatDaysOfWeek: String? = null
 )

@@ -136,7 +136,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         financialType: FinancialType? = null,
         attachmentUri: String? = null,
         mileageTargetKm: Long? = null,
-        location: String? = null
+        location: String? = null,
+        bankName: String? = null,
+        repeatDaysOfWeek: String? = null
     ) {
         viewModelScope.launch {
             val reminder = Reminder(
@@ -152,7 +154,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 financialType = financialType,
                 attachmentUri = attachmentUri,
                 mileageTargetKm = mileageTargetKm,
-                location = location
+                location = location,
+                bankName = bankName,
+                repeatDaysOfWeek = repeatDaysOfWeek
             )
             val id = dao.upsert(reminder)
             NotificationScheduler.schedule(getApplication(), reminder.copy(id = id))
@@ -179,7 +183,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         financialType: FinancialType?,
         attachmentUri: String?,
         mileageTargetKm: Long?,
-        location: String?
+        location: String?,
+        bankName: String?,
+        repeatDaysOfWeek: String?
     ) {
         viewModelScope.launch {
             val existing = dao.getById(id) ?: return@launch
@@ -196,7 +202,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 financialType = financialType,
                 attachmentUri = attachmentUri,
                 mileageTargetKm = mileageTargetKm,
-                location = location
+                location = location,
+                bankName = bankName,
+                repeatDaysOfWeek = repeatDaysOfWeek
             )
             dao.update(updated)
             NotificationScheduler.cancel(getApplication(), id)

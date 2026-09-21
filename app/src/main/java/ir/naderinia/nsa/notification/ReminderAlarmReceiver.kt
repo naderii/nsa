@@ -42,7 +42,8 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 if (reminder.repeatInterval != RepeatInterval.NONE) {
                     val next = NotificationScheduler.nextOccurrence(
                         reminder.triggerAtMillis,
-                        reminder.repeatInterval
+                        reminder.repeatInterval,
+                        reminder.repeatDaysOfWeek
                     )
                     if (next != null) {
                         val updated = reminder.copy(triggerAtMillis = next)
@@ -69,7 +70,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, NotificationHelper.CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, NotificationHelper.currentChannelId(context))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)

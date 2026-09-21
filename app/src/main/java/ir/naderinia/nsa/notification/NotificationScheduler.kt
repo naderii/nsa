@@ -48,16 +48,34 @@ object NotificationScheduler {
     }
 
     /** Computes the next trigger time for a repeating reminder, given the one that just fired. */
-    fun nextOccurrence(currentTriggerMillis: Long, interval: RepeatInterval): Long? {
+    fun nextOccurrence(currentTriggerMillis: Long, interval: RepeatInterval, repeatDaysOfWeek: String? = null): Long? {
         if (interval == RepeatInterval.NONE) return null
         val cal = Calendar.getInstance().apply { timeInMillis = currentTriggerMillis }
+
+        if (interval == RepeatInterval.WEEKLY) {
+            val selectedDays = parseDaysOfWeek(repeatDaysOfWeek)
+            if (selectedDays.isNotEmpty()) {
+                // Step forward day by day (never more than 7 tries) until we
+                // land on one of the selected weekdays, keeping the same time-of-day.
+                repeat(7) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    if (cal.get(Calendar.DAY_OF_WEEK) in selectedDays) return cal.timeInMillis
+                }
+                return cal.timeInMillis
+            }
+            cal.add(Calendar.WEEK_OF_YEAR, 1)
+            return cal.timeInMillis
+        }
+
         when (interval) {
             RepeatInterval.DAILY -> cal.add(Calendar.DAY_OF_YEAR, 1)
-            RepeatInterval.WEEKLY -> cal.add(Calendar.WEEK_OF_YEAR, 1)
             RepeatInterval.MONTHLY -> cal.add(Calendar.MONTH, 1)
             RepeatInterval.YEARLY -> cal.add(Calendar.YEAR, 1)
-            RepeatInterval.NONE -> {}
+            else -> {}
         }
         return cal.timeInMillis
     }
+
+    private fun parseDaysOfWeek(csv: String?): Set<Int> =
+        csv?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.toSet() ?: emptySet()
 }

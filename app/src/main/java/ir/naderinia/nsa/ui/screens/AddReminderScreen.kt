@@ -1,7 +1,6 @@
 package ir.naderinia.nsa.ui.screens
 
 import android.Manifest
-import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,7 +29,7 @@ import coil.compose.rememberAsyncImagePainter
 import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
-import ir.naderinia.nsa.ui.components.JalaliDatePickerDialog
+import ir.naderinia.nsa.ui.components.JalaliDateTimePickerDialog
 import ir.naderinia.nsa.ui.theme.CategoryColors
 import ir.naderinia.nsa.util.BabyCareGuide
 import ir.naderinia.nsa.util.CarPrefs
@@ -49,12 +48,27 @@ private enum class ReminderTemplate(val label: String, val fixedCategory: String
     BIRTHDAY("تولد و سالگرد", "تولد و سالگرد"),
     MEDICATION("دارو و ویتامین", "دارو"),
     PREGNANCY("بارداری", "بارداری"),
-    BABY_CARE("نوزاد و کودک", "نوزاد و کودک")
+    BABY_CARE("نوزاد و کودک", "نوزاد و کودک"),
+    RELIGIOUS("مذهبی", "مذهبی")
 }
 
 private val CAR_SERVICE_BUILTIN_ITEMS = listOf("تعویض روغن", "تعویض لاستیک", "باتری", "بیمه", "معاینه فنی", "سرویس دوره‌ای")
 private val PROPERTY_BUILTIN_ITEMS = listOf("سرویس کولر", "سرویس پکیج", "شارژ ساختمان", "تعمیرات", "بیمه ساختمان")
-private val GENERAL_BUILTIN_CATEGORIES = listOf("قرار ملاقات", "ورزش", "لیست خرید", "کارهای خانه", "عادت روزانه")
+private val GENERAL_BUILTIN_CATEGORIES = listOf("قرار ملاقات", "ورزش", "لیست خرید", "کارهای خانه", "عادت روزانه", "کار اداری", "تماس تلفنی", "یادداشت")
+private val BILL_BUILTIN_ITEMS = listOf("آب", "برق", "گاز", "اینترنت", "تلفن ثابت", "تلفن همراه", "تلویزیون/ماهواره", "شهرداری")
+private val RELIGIOUS_BUILTIN_ITEMS = listOf(
+    "دعای کمیل (شب جمعه)", "دعای ندبه (صبح جمعه)", "زیارت عاشورا",
+    "دعای توسل", "نماز شب", "دعای صباح", "قرائت قرآن"
+)
+private val PERSIAN_WEEK_DAYS = listOf(
+    Calendar.SATURDAY to "شنبه",
+    Calendar.SUNDAY to "یکشنبه",
+    Calendar.MONDAY to "دوشنبه",
+    Calendar.TUESDAY to "سه‌شنبه",
+    Calendar.WEDNESDAY to "چهارشنبه",
+    Calendar.THURSDAY to "پنجشنبه",
+    Calendar.FRIDAY to "جمعه"
+)
 
 private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
     if (reminder == null) return ReminderTemplate.GENERAL
@@ -67,6 +81,7 @@ private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
         reminder.category == "دارو" -> ReminderTemplate.MEDICATION
         reminder.category == "بارداری" -> ReminderTemplate.PREGNANCY
         reminder.category == "نوزاد و کودک" -> ReminderTemplate.BABY_CARE
+        reminder.category == "مذهبی" -> ReminderTemplate.RELIGIOUS
         else -> ReminderTemplate.GENERAL
     }
 }
@@ -90,7 +105,9 @@ fun AddReminderScreen(
         financialType: FinancialType?,
         attachmentUri: String?,
         mileageTargetKm: Long?,
-        location: String?
+        location: String?,
+        bankName: String?,
+        repeatDaysOfWeek: String?
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -106,6 +123,12 @@ fun AddReminderScreen(
     var amountText by remember(editingReminder) { mutableStateOf(editingReminder?.amount?.toString() ?: "") }
     var counterparty by remember(editingReminder) { mutableStateOf(editingReminder?.counterparty ?: "") }
     var counterpartyPhone by remember(editingReminder) { mutableStateOf(editingReminder?.counterpartyPhone) }
+    var bankName by remember(editingReminder) { mutableStateOf(editingReminder?.bankName ?: "") }
+    var selectedWeekDays by remember(editingReminder) {
+        mutableStateOf(
+            editingReminder?.repeatDaysOfWeek?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.toSet() ?: emptySet()
+        )
+    }
     var locationText by remember(editingReminder) { mutableStateOf(editingReminder?.location ?: "") }
     var mileageCurrentText by remember(editingReminder) {
         mutableStateOf(editingReminder?.let { CarPrefs.getCurrentKm(context).toString() } ?: CarPrefs.getCurrentKm(context).toString())
@@ -324,6 +347,20 @@ fun AddReminderScreen(
                     Text(BabyCareGuide.disclaimer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
+                ReminderTemplate.RELIGIOUS -> {
+                    Text("پیشنهاد", style = MaterialTheme.typography.titleSmall)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(RELIGIOUS_BUILTIN_ITEMS) { item ->
+                            AssistChip(onClick = { title = item }, label = { Text(item) })
+                        }
+                    }
+                    Text(
+                        "این فهرست کامل نیست — هر ورد یا عمل دیگه‌ای رو خودت توی عنوان بنویس و با «تکرار هفتگی» روی روز دلخواه تنظیمش کن.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 ReminderTemplate.CAR_SERVICE -> {
                     val suggestions = (CAR_SERVICE_BUILTIN_ITEMS + knownItemsByCategory["ماشین"].orEmpty()).distinct()
                     Text("آیتم سرویس", style = MaterialTheme.typography.titleSmall)
@@ -412,6 +449,25 @@ fun AddReminderScreen(
                         label = { Text("مبلغ (تومان)") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (financialType == FinancialType.BILL) {
+                        Text("نوع قبض", style = MaterialTheme.typography.titleSmall)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(BILL_BUILTIN_ITEMS) { item ->
+                                AssistChip(onClick = { title = item }, label = { Text(item) })
+                            }
+                        }
+                    }
+
+                    if (financialType == FinancialType.CHECK || financialType == FinancialType.INSTALLMENT) {
+                        OutlinedTextField(
+                            value = bankName,
+                            onValueChange = { bankName = it },
+                            label = { Text("بانک") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     OutlinedTextField(
                         value = counterparty,
                         onValueChange = {
@@ -444,25 +500,12 @@ fun AddReminderScreen(
             }
 
             if (showJalaliDatePicker) {
-                val current = JalaliCalendar.millisToJalali(triggerMillis)
-                JalaliDatePickerDialog(
-                    initialYear = current.year,
-                    initialMonth = current.month,
-                    initialDay = current.day,
+                JalaliDateTimePickerDialog(
+                    initialMillis = triggerMillis,
                     onDismiss = { showJalaliDatePicker = false },
-                    onConfirm = { jy, jm, jd ->
+                    onConfirm = { millis ->
+                        triggerMillis = millis
                         showJalaliDatePicker = false
-                        val hourNow = calendar.get(Calendar.HOUR_OF_DAY)
-                        val minuteNow = calendar.get(Calendar.MINUTE)
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute ->
-                                triggerMillis = JalaliCalendar.jalaliToMillis(jy, jm, jd, hour, minute)
-                            },
-                            hourNow,
-                            minuteNow,
-                            true
-                        ).show()
                     }
                 )
             }
@@ -489,6 +532,25 @@ fun AddReminderScreen(
                                 repeatInterval = option
                                 repeatMenuExpanded = false
                             }
+                        )
+                    }
+                }
+            }
+
+            if (repeatInterval == RepeatInterval.WEEKLY) {
+                Text("روزهای تکرار (اختیاری، می‌تونی چندتا انتخاب کنی)", style = MaterialTheme.typography.titleSmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(PERSIAN_WEEK_DAYS) { (dayValue, label) ->
+                        FilterChip(
+                            selected = dayValue in selectedWeekDays,
+                            onClick = {
+                                selectedWeekDays = if (dayValue in selectedWeekDays) {
+                                    selectedWeekDays - dayValue
+                                } else {
+                                    selectedWeekDays + dayValue
+                                }
+                            },
+                            label = { Text(label) }
                         )
                     }
                 }
@@ -553,7 +615,13 @@ fun AddReminderScreen(
                             if (template == ReminderTemplate.FINANCIAL) financialType else null,
                             attachmentUri?.toString(),
                             if (template == ReminderTemplate.CAR_SERVICE) mileageTargetText.toLongOrNull() else null,
-                            if (template == ReminderTemplate.MEETING) locationText.ifBlank { null } else null
+                            if (template == ReminderTemplate.MEETING) locationText.ifBlank { null } else null,
+                            if (template == ReminderTemplate.FINANCIAL &&
+                                (financialType == FinancialType.CHECK || financialType == FinancialType.INSTALLMENT)
+                            ) bankName.ifBlank { null } else null,
+                            if (repeatInterval == RepeatInterval.WEEKLY && selectedWeekDays.isNotEmpty()) {
+                                selectedWeekDays.joinToString(",")
+                            } else null
                         )
                     },
                     enabled = title.isNotBlank(),
