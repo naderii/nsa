@@ -117,17 +117,7 @@ class MainActivity : FragmentActivity() {
                 val ringtonePickerLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.StartActivityForResult()
                 ) { result ->
-                    val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        result.data?.getParcelableExtra(
-                            RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
-                            Uri::class.java
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        result.data?.getParcelableExtra<Uri>(
-                            RingtoneManager.EXTRA_RINGTONE_PICKED_URI
-                        )
-                    }
+                    val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
                     NotificationHelper.setCustomSound(this, uri)
                 }
 

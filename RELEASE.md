@@ -66,4 +66,4 @@ keyPassword=رمز_کلید
 - [ ] `versionCode` رو هر بار که آپدیت می‌دی، ببر بالا (از قبل داریم مدیریتش می‌کنیم)
 - [ ] `keystore.properties` رو ساختی و `bundleRelease`/`assembleRelease` رو تست کردی
 - [ ] یه‌بار اپ release رو نصب کن و کامل تست کن (R8 بعضی‌وقتا رفتار متفاوتی از debug داره)
-- [ ] از خودت مطمئن شو که دیتابیس migration داره (نه `fallbackToDestructiveMigration`) قبل از انتشار عمومی — این خیلی مهمه، پایین‌تر توضیح دادم
+- [x] Migration واقعی دیتابیس به‌جای `fallbackToDestructiveMigration` انجام شد — از این به بعد هر تغییر ساختار دیتابیس باید با یه Migration واقعی همراه باشه (الگوش توی `AppDatabase.kt` هست)

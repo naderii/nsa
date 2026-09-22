@@ -15,7 +15,6 @@
 ## نقشه راه باقی‌مانده
 
 - [ ] ورودی صوتی (Speech-to-Text)
-- [ ] Migration واقعی دیتابیس به‌جای `fallbackToDestructiveMigration` (باید قبل از انتشار عمومی انجام بشه — نگاه کن به `RELEASE.md`)
 - [ ] یادآوری چندمرحله‌ای (Snooze)
 
 ## فونت
