@@ -1,7 +1,5 @@
 package ir.naderinia.nsa.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import ir.naderinia.nsa.data.FinancialType
@@ -166,25 +163,26 @@ fun AddReminderScreen(
     }
 
     val pickContactLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickContact()
-    ) { uri ->
-        uri?.let {
-            resolveContact(context, it)?.let { picked ->
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && uri != null) {
+            resolveContact(context, uri)?.let { picked ->
                 counterparty = picked.displayName
                 counterpartyPhone = picked.phoneNumber
             }
         }
     }
 
-    val requestContactsPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) pickContactLauncher.launch(null) }
-
     fun pickFromContacts() {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.READ_CONTACTS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (hasPermission) pickContactLauncher.launch(null) else requestContactsPermission.launch(Manifest.permission.READ_CONTACTS)
+        // Picking a specific phone-number entry via the system Contacts app's
+        // own picker UI needs no READ_CONTACTS permission — only reading the
+        // full contacts list yourself would require it.
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_PICK,
+            android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        )
+        pickContactLauncher.launch(intent)
     }
 
     val calendar = remember(editingReminder) {

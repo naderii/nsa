@@ -11,15 +11,16 @@
     <!-- Reschedule alarms after device reboot (AlarmManager alarms don't survive reboot) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Read contacts so the user can pick a counterparty instead of typing a name -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-
     <!-- Request exemption from aggressive battery optimization (Xiaomi/Samsung/Huawei etc.) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- Camera for scanning receipts/bills (on-device OCR, no cloud) -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- No CAMERA or READ_CONTACTS permission needed: receipt scanning and the
+         attachment photo both launch the system Camera app via an implicit
+         intent (ActivityResultContracts.TakePicture) and just receive the
+         resulting file — the Camera app itself handles camera access. Same
+         idea for picking a counterparty: ACTION_PICK on the Contacts app's
+         phone-number picker returns one contact via Intent, with no need to
+         read the address book ourselves. See ContactPicker.kt. -->
 
     <application
         android:allowBackup="true"

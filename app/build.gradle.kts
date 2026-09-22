@@ -16,8 +16,8 @@ android {
         applicationId = "ir.naderinia.nsa"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "0.15.0"
+        versionCode = 17
+        versionName = "0.15.1"
     }
 
     // Reads signing secrets from keystore.properties, a file that never gets
