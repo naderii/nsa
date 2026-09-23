@@ -27,7 +27,11 @@ class NsaWidgetProvider : AppWidgetProvider() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 appWidgetIds.forEach { id ->
-                    updateWidget(context, appWidgetManager, id)
+                    updateWidget(
+                        context,
+                        appWidgetManager,
+                        id
+                    )
                 }
             } finally {
                 pendingResult.finish()
@@ -45,16 +49,21 @@ class NsaWidgetProvider : AppWidgetProvider() {
             R.layout.widget_today
         )
 
-        // Open app when widget title is tapped.
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // Open app when the widget title is tapped.
+        val openIntent = Intent(
+            context,
+            MainActivity::class.java
+        ).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 
         val openPendingIntent = PendingIntent.getActivity(
             context,
             1,
             openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE
         )
 
         views.setOnClickPendingIntent(
@@ -62,6 +71,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
             openPendingIntent
         )
 
+        // Database.
         val dao = (context.applicationContext as NsaApplication)
             .database
             .reminderDao()
@@ -71,32 +81,71 @@ class NsaWidgetProvider : AppWidgetProvider() {
         val now = System.currentTimeMillis()
         val today = Calendar.getInstance()
 
+        // Today's unfinished tasks.
         val todayTasks = all
             .filter { reminder ->
                 !reminder.isDone &&
                     reminder.triggerAtMillis >= now &&
-                    isSameDay(reminder.triggerAtMillis, today)
+                    isSameDay(
+                        reminder.triggerAtMillis,
+                        today
+                    )
             }
-            .sortedBy { it.triggerAtMillis }
+            .sortedBy {
+                it.triggerAtMillis
+            }
 
+        // Overdue unfinished tasks.
         val overdueCount = all.count { reminder ->
             !reminder.isDone &&
                 reminder.triggerAtMillis < now
         }
 
-        // Number of today's tasks.
+        // Total number of today's tasks.
         views.setTextViewText(
             R.id.widget_today_count,
             "${todayTasks.size} کار"
         )
 
-        // Remove all dynamically added task views.
-        views.removeAllViews(R.id.widget_tasks_container)
+        // Remove previous dynamic task views.
+        views.removeAllViews(
+            R.id.widget_tasks_container
+        )
 
-        // Show maximum 5 tasks.
-        val visibleTasks = todayTasks.take(5)
+        // Get current widget size.
+        val options = appWidgetManager.getAppWidgetOptions(
+            widgetId
+        )
 
-        visibleTasks.forEachIndexed { index, reminder ->
+        val minHeight = options.getInt(
+            AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT
+        )
+
+        android.util.Log.d(
+        "NsaWidget",
+        "widgetId=$widgetId minHeight=${minHeight}dp"
+        )
+
+        /*
+         * Determine how many tasks should be visible
+         * based on the widget height.
+         *
+         * Small  -> 2 tasks
+         * Medium -> 4 tasks
+         * Large  -> 7 tasks
+         */
+        val visibleTaskCount = when {
+            minHeight < 150 -> 2
+            minHeight < 220 -> 4
+            else -> 7
+        }
+
+        val visibleTasks = todayTasks.take(
+            visibleTaskCount
+        )
+
+        // Add today's tasks.
+        visibleTasks.forEach { reminder ->
 
             val taskView = RemoteViews(
                 context.packageName,
@@ -108,6 +157,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
                 "• ${reminder.title}"
             )
 
+            // Open the app when a task is tapped.
             val taskIntent = Intent(
                 context,
                 MainActivity::class.java
@@ -142,6 +192,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
 
         // No tasks today.
         if (todayTasks.isEmpty()) {
+
             val emptyView = RemoteViews(
                 context.packageName,
                 R.layout.widget_task_item
@@ -158,8 +209,9 @@ class NsaWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        // More than 5 tasks.
-        if (todayTasks.size > 5) {
+        // More tasks are available.
+        if (todayTasks.size > visibleTaskCount) {
+
             val moreView = RemoteViews(
                 context.packageName,
                 R.layout.widget_task_item
@@ -167,7 +219,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
 
             moreView.setTextViewText(
                 R.id.widget_task_title,
-                "+ ${todayTasks.size - 5} کار دیگر"
+                "+ ${todayTasks.size - visibleTaskCount} کار دیگر"
             )
 
             moreView.setOnClickPendingIntent(
@@ -181,6 +233,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
             )
         }
 
+        // Overdue count.
         views.setTextViewText(
             R.id.widget_overdue_count,
             if (overdueCount > 0) {
@@ -190,6 +243,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
             }
         )
 
+        // Update widget.
         appWidgetManager.updateAppWidget(
             widgetId,
             views
@@ -200,6 +254,7 @@ class NsaWidgetProvider : AppWidgetProvider() {
         millis: Long,
         reference: Calendar
     ): Boolean {
+
         val target = Calendar.getInstance().apply {
             timeInMillis = millis
         }
@@ -213,7 +268,10 @@ class NsaWidgetProvider : AppWidgetProvider() {
     companion object {
 
         fun updateAll(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
+
+            val manager = AppWidgetManager.getInstance(
+                context
+            )
 
             val ids = manager.getAppWidgetIds(
                 ComponentName(
@@ -223,11 +281,14 @@ class NsaWidgetProvider : AppWidgetProvider() {
             )
 
             if (ids.isNotEmpty()) {
+
                 val intent = Intent(
                     context,
                     NsaWidgetProvider::class.java
                 ).apply {
-                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                    action =
+                        AppWidgetManager.ACTION_APPWIDGET_UPDATE
+
                     putExtra(
                         AppWidgetManager.EXTRA_APPWIDGET_IDS,
                         ids
