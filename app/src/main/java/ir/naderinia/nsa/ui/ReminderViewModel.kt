@@ -364,6 +364,23 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             )
         }
     }
+    
+    fun restoreReminder(reminder: Reminder) {
+    viewModelScope.launch {
+        dao.upsert(reminder)
+
+        if (!reminder.isDone) {
+            NotificationScheduler.schedule(
+                getApplication(),
+                reminder
+            )
+        }
+
+        NsaWidgetProvider.updateAll(
+            getApplication()
+        )
+    }
+    }
 
     fun toggleDone(reminder: Reminder) {
         viewModelScope.launch {
