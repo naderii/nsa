@@ -10,8 +10,10 @@ import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.notification.NotificationScheduler
 import ir.naderinia.nsa.widget.NsaWidgetProvider
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +35,12 @@ data class DashboardStats(
     val lastMonthSpend: Long
 )
 
+sealed interface ReminderUiEvent {
+    data object ReminderSaved : ReminderUiEvent
+    data object ReminderUpdated : ReminderUiEvent
+    data class ReminderDeleted(val reminder: Reminder) : ReminderUiEvent
+}
+
 private fun monthRange(monthsAgo: Int): Pair<Long, Long> {
     val start = Calendar.getInstance().apply {
         add(Calendar.MONTH, -monthsAgo)
@@ -42,67 +50,149 @@ private fun monthRange(monthsAgo: Int): Pair<Long, Long> {
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
     }
-    val end = (start.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
+
+    val end = (start.clone() as Calendar).apply {
+        add(Calendar.MONTH, 1)
+    }
+
     return start.timeInMillis to end.timeInMillis
 }
 
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val dao = (application as NsaApplication).database.reminderDao()
-    private val paymentLogDao = (application as NsaApplication).database.paymentLogDao()
+    private val dao =
+        (application as NsaApplication).database.reminderDao()
+
+    private val paymentLogDao =
+        (application as NsaApplication).database.paymentLogDao()
+
+    private val _uiEvents = MutableSharedFlow<ReminderUiEvent>()
+
+    val uiEvents = _uiEvents.asSharedFlow()
 
     val reminders: StateFlow<List<Reminder>> = dao.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
 
     val knownCategories: StateFlow<List<String>> = dao.observeCategories()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
 
     /** Previously used titles, grouped by category — powers the "آیتم" suggestion
      * chips per template (e.g. category "ماشین" → "تعویض روغن", "تعویض لاستیک"...). */
-    val knownItemsByCategory: StateFlow<Map<String, List<String>>> = dao.observeAll()
-        .map { list ->
-            list.groupBy { it.category }.mapValues { (_, items) -> items.map { it.title }.distinct() }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
-
-    val financialReminders: StateFlow<List<Reminder>> = dao.observeFinancial()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val financialSummary: StateFlow<FinancialSummary> = dao.observeFinancial()
-        .map { list ->
-            val remaining = { r: Reminder -> (r.amount ?: 0) - r.amountPaid }
-            FinancialSummary(
-                totalDebtRemaining = list.filter { it.financialType == FinancialType.DEBT && !it.isDone }
-                    .sumOf(remaining),
-                totalCreditRemaining = list.filter { it.financialType == FinancialType.CREDIT && !it.isDone }
-                    .sumOf(remaining)
+    val knownItemsByCategory: StateFlow<Map<String, List<String>>> =
+        dao.observeAll()
+            .map { list ->
+                list
+                    .groupBy { it.category }
+                    .mapValues { (_, items) ->
+                        items
+                            .map { it.title }
+                            .distinct()
+                    }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                emptyMap()
             )
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FinancialSummary(0, 0))
+
+    val financialReminders: StateFlow<List<Reminder>> =
+        dao.observeFinancial()
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                emptyList()
+            )
+
+    val financialSummary: StateFlow<FinancialSummary> =
+        dao.observeFinancial()
+            .map { list ->
+                val remaining = { r: Reminder ->
+                    (r.amount ?: 0) - r.amountPaid
+                }
+
+                FinancialSummary(
+                    totalDebtRemaining = list
+                        .filter {
+                            it.financialType == FinancialType.DEBT &&
+                                !it.isDone
+                        }
+                        .sumOf(remaining),
+
+                    totalCreditRemaining = list
+                        .filter {
+                            it.financialType == FinancialType.CREDIT &&
+                                !it.isDone
+                        }
+                        .sumOf(remaining)
+                )
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                FinancialSummary(0, 0)
+            )
 
     val dashboardStats: StateFlow<DashboardStats> = combine(
         dao.observeAll(),
         paymentLogDao.observeAll()
     ) { allReminders, logs ->
+
         val now = System.currentTimeMillis()
         val todayCal = Calendar.getInstance()
 
-        val today = allReminders.filter { r ->
-            !r.isDone && r.triggerAtMillis >= now && isSameDay(r.triggerAtMillis, todayCal)
-        }
-        val overdue = allReminders.filter { !it.isDone && it.triggerAtMillis < now }
-        val sevenDaysMillis = 7L * 24 * 60 * 60 * 1000
-        val upcomingPayments = allReminders.filter {
-            it.financialType != null && !it.isDone &&
-                it.triggerAtMillis in now..(now + sevenDaysMillis)
+        val today = allReminders.filter { reminder ->
+            !reminder.isDone &&
+                reminder.triggerAtMillis >= now &&
+                isSameDay(
+                    reminder.triggerAtMillis,
+                    todayCal
+                )
         }
 
-        val (thisMonthStart, thisMonthEnd) = monthRange(0)
-        val (lastMonthStart, lastMonthEnd) = monthRange(1)
-        val thisMonthSpend = logs.filter { it.timestampMillis in thisMonthStart until thisMonthEnd }
-            .sumOf { it.amount }
-        val lastMonthSpend = logs.filter { it.timestampMillis in lastMonthStart until lastMonthEnd }
-            .sumOf { it.amount }
+        val overdue = allReminders.filter {
+            !it.isDone &&
+                it.triggerAtMillis < now
+        }
+
+        val sevenDaysMillis =
+            7L * 24 * 60 * 60 * 1000
+
+        val upcomingPayments = allReminders.filter {
+            it.financialType != null &&
+                !it.isDone &&
+                it.triggerAtMillis in
+                now..(now + sevenDaysMillis)
+        }
+
+        val (thisMonthStart, thisMonthEnd) =
+            monthRange(0)
+
+        val (lastMonthStart, lastMonthEnd) =
+            monthRange(1)
+
+        val thisMonthSpend =
+            logs
+                .filter {
+                    it.timestampMillis in
+                        thisMonthStart until thisMonthEnd
+                }
+                .sumOf { it.amount }
+
+        val lastMonthSpend =
+            logs
+                .filter {
+                    it.timestampMillis in
+                        lastMonthStart until lastMonthEnd
+                }
+                .sumOf { it.amount }
 
         DashboardStats(
             todayItems = today,
@@ -114,13 +204,27 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        DashboardStats(emptyList(), emptyList(), emptyList(), 0, 0)
+        DashboardStats(
+            emptyList(),
+            emptyList(),
+            emptyList(),
+            0,
+            0
+        )
     )
 
-    private fun isSameDay(millis: Long, reference: Calendar): Boolean {
-        val target = Calendar.getInstance().apply { timeInMillis = millis }
-        return target.get(Calendar.YEAR) == reference.get(Calendar.YEAR) &&
-            target.get(Calendar.DAY_OF_YEAR) == reference.get(Calendar.DAY_OF_YEAR)
+    private fun isSameDay(
+        millis: Long,
+        reference: Calendar
+    ): Boolean {
+        val target = Calendar.getInstance().apply {
+            timeInMillis = millis
+        }
+
+        return target.get(Calendar.YEAR) ==
+            reference.get(Calendar.YEAR) &&
+            target.get(Calendar.DAY_OF_YEAR) ==
+            reference.get(Calendar.DAY_OF_YEAR)
     }
 
     fun addReminder(
@@ -141,6 +245,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         repeatDaysOfWeek: String? = null
     ) {
         viewModelScope.launch {
+
             val reminder = Reminder(
                 title = title,
                 note = note,
@@ -158,9 +263,21 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 bankName = bankName,
                 repeatDaysOfWeek = repeatDaysOfWeek
             )
+
             val id = dao.upsert(reminder)
-            NotificationScheduler.schedule(getApplication(), reminder.copy(id = id))
-            NsaWidgetProvider.updateAll(getApplication())
+
+            NotificationScheduler.schedule(
+                getApplication(),
+                reminder.copy(id = id)
+            )
+
+            NsaWidgetProvider.updateAll(
+                getApplication()
+            )
+
+            _uiEvents.emit(
+                ReminderUiEvent.ReminderSaved
+            )
         }
     }
 
@@ -188,7 +305,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         repeatDaysOfWeek: String?
     ) {
         viewModelScope.launch {
-            val existing = dao.getById(id) ?: return@launch
+
+            val existing = dao.getById(id)
+                ?: return@launch
+
             val updated = existing.copy(
                 title = title,
                 note = note,
@@ -206,27 +326,56 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 bankName = bankName,
                 repeatDaysOfWeek = repeatDaysOfWeek
             )
+
             dao.update(updated)
-            NotificationScheduler.cancel(getApplication(), id)
+
+            NotificationScheduler.cancel(
+                getApplication(),
+                id
+            )
+
             if (!updated.isDone) {
-                NotificationScheduler.schedule(getApplication(), updated)
+                NotificationScheduler.schedule(
+                    getApplication(),
+                    updated
+                )
             }
-            NsaWidgetProvider.updateAll(getApplication())
+
+            NsaWidgetProvider.updateAll(
+                getApplication()
+            )
+
+            _uiEvents.emit(
+                ReminderUiEvent.ReminderUpdated
+            )
         }
     }
 
     fun deleteReminder(reminder: Reminder) {
         viewModelScope.launch {
             NotificationScheduler.cancel(getApplication(), reminder.id)
+    
             dao.delete(reminder)
+    
             NsaWidgetProvider.updateAll(getApplication())
+    
+            _uiEvents.emit(
+                ReminderUiEvent.ReminderDeleted(reminder)
+            )
         }
     }
 
     fun toggleDone(reminder: Reminder) {
         viewModelScope.launch {
-            dao.update(reminder.copy(isDone = !reminder.isDone))
-            NsaWidgetProvider.updateAll(getApplication())
+            dao.update(
+                reminder.copy(
+                    isDone = !reminder.isDone
+                )
+            )
+
+            NsaWidgetProvider.updateAll(
+                getApplication()
+            )
         }
     }
 
@@ -235,17 +384,45 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * logs it with a timestamp so monthly spend reports (dashboard) can
      * compare this month against last month.
      */
-    fun recordPayment(reminder: Reminder, paymentAmount: Long) {
+    fun recordPayment(
+        reminder: Reminder,
+        paymentAmount: Long
+    ) {
         if (paymentAmount <= 0) return
+
         viewModelScope.launch {
-            val newPaid = reminder.amountPaid + paymentAmount
-            val fullyPaid = reminder.amount != null && newPaid >= reminder.amount
-            dao.update(reminder.copy(amountPaid = newPaid, isDone = fullyPaid))
-            paymentLogDao.insert(PaymentLog(reminderId = reminder.id, amount = paymentAmount))
+
+            val newPaid =
+                reminder.amountPaid + paymentAmount
+
+            val fullyPaid =
+                reminder.amount != null &&
+                    newPaid >= reminder.amount
+
+            dao.update(
+                reminder.copy(
+                    amountPaid = newPaid,
+                    isDone = fullyPaid
+                )
+            )
+
+            paymentLogDao.insert(
+                PaymentLog(
+                    reminderId = reminder.id,
+                    amount = paymentAmount
+                )
+            )
+
             if (fullyPaid) {
-                NotificationScheduler.cancel(getApplication(), reminder.id)
+                NotificationScheduler.cancel(
+                    getApplication(),
+                    reminder.id
+                )
             }
-            NsaWidgetProvider.updateAll(getApplication())
+
+            NsaWidgetProvider.updateAll(
+                getApplication()
+            )
         }
     }
 }
