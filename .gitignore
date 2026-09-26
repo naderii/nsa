@@ -18,7 +18,7 @@ captures/
 # Keystore (never commit signing keys)
 *.jks
 *.keystore
+keystore.properties
 
 # Logs
 *.log
-keystore.properties
