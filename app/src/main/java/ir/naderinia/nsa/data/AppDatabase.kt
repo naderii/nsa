@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 
-@Database(entities = [Reminder::class, PaymentLog::class], version = 8, exportSchema = false)
+@Database(entities = [Reminder::class, PaymentLog::class], version = 9, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
@@ -41,19 +41,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        // Add one entry here per future schema change. Empty for now — the
-        // current installed version (8) already matches this codebase's
-        // schema, so nothing needs migrating yet.
+        // Add one entry here per future schema change.
         //
         // Template for next time (bump the @Database version above too):
         //
         // private val ALL_MIGRATIONS: Array<Migration> = arrayOf(
-        //     object : Migration(8, 9) {
+        //     object : Migration(9, 10) {
         //         override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         //             db.execSQL("ALTER TABLE reminders ADD COLUMN newField TEXT")
         //         }
         //     }
         // )
-        private val ALL_MIGRATIONS: Array<Migration> = arrayOf()
+        private val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            object : Migration(8, 9) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    // Performance indices — no data changes, just faster lookups
+                    // on the columns we filter by most (category, financial type,
+                    // due date).
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_category ON reminders(category)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_financialType ON reminders(financialType)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_triggerAtMillis ON reminders(triggerAtMillis)")
+                }
+            }
+        )
     }
 }

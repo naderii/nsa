@@ -364,18 +364,22 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             )
         }
     }
-
-    /** Undoes a delete: re-inserts the exact same reminder (same id) and,
-     * if it wasn't marked done, reschedules its alarm. Used by the "واگرد"
-     * action on the delete Snackbar. */
+    
     fun restoreReminder(reminder: Reminder) {
-        viewModelScope.launch {
-            dao.upsert(reminder)
-            if (!reminder.isDone) {
-                NotificationScheduler.schedule(getApplication(), reminder)
-            }
-            NsaWidgetProvider.updateAll(getApplication())
+    viewModelScope.launch {
+        dao.upsert(reminder)
+
+        if (!reminder.isDone) {
+            NotificationScheduler.schedule(
+                getApplication(),
+                reminder
+            )
         }
+
+        NsaWidgetProvider.updateAll(
+            getApplication()
+        )
+    }
     }
 
     fun toggleDone(reminder: Reminder) {

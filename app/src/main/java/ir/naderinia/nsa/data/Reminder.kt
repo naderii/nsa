@@ -1,6 +1,7 @@
 package ir.naderinia.nsa.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class RepeatInterval {
@@ -15,7 +16,14 @@ enum class FinancialType {
     BILL         // قبض
 }
 
-@Entity(tableName = "reminders")
+@Entity(
+    tableName = "reminders",
+    indices = [
+        Index("category"),
+        Index("financialType"),
+        Index("triggerAtMillis")
+    ]
+)
 data class Reminder(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
