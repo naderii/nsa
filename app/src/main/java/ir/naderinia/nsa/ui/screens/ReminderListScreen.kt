@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -81,6 +84,7 @@ private fun urgencyFor(reminder: Reminder, group: ReminderGroup, currentKm: Long
  * bottom nav bar + the "add" FAB).
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun ReminderListContent(
     reminders: List<Reminder>,
     onToggleDone: (Reminder) -> Unit,
@@ -149,14 +153,16 @@ fun ReminderListContent(
                     )
                 }
                 items(items, key = { it.id }) { reminder ->
-                    ReminderCard(
-                        reminder = reminder,
-                        urgency = urgencyFor(reminder, group, currentKm),
-                        onToggleDone = onToggleDone,
-                        onDelete = onDelete,
-                        onRecordPayment = onRecordPayment,
-                        onEdit = onEdit
-                    )
+                    Box(modifier = Modifier.animateItemPlacement()) {
+                        ReminderCard(
+                            reminder = reminder,
+                            urgency = urgencyFor(reminder, group, currentKm),
+                            onToggleDone = onToggleDone,
+                            onDelete = onDelete,
+                            onRecordPayment = onRecordPayment,
+                            onEdit = onEdit
+                        )
+                    }
                 }
             }
         }
@@ -173,6 +179,7 @@ private fun ReminderCard(
     onEdit: (Reminder) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showPaymentDialog by remember { mutableStateOf(false) }
 
     val containerColor = when (urgency) {
@@ -260,7 +267,15 @@ private fun ReminderCard(
                         Text(text = financialLine, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Checkbox(checked = reminder.isDone, onCheckedChange = { onToggleDone(reminder) })
+                Checkbox(
+                    checked = reminder.isDone,
+                    onCheckedChange = {
+                        if (!reminder.isDone) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onToggleDone(reminder)
+                    }
+                )
                 IconButton(onClick = { onEdit(reminder) }) {
                     Icon(Icons.Default.Edit, contentDescription = "ویرایش")
                 }

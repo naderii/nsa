@@ -85,7 +85,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         )
 
     /** Previously used titles, grouped by category — powers the "آیتم" suggestion
-     * chips per template (e.g. category "ماشین" → "تعویض روغن", "تعویض لاستیک"...). */
+     * chips per template (e.g. category "وسیله نقلیه" → "تعویض روغن", "تعویض لاستیک"...). */
     val knownItemsByCategory: StateFlow<Map<String, List<String>>> =
         dao.observeAll()
             .map { list ->

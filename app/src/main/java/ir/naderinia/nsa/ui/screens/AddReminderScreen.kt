@@ -38,7 +38,7 @@ import java.util.Calendar
 
 private enum class ReminderTemplate(val label: String, val fixedCategory: String?) {
     GENERAL("عمومی", null),
-    CAR_SERVICE("سرویس خودرو", "ماشین"),
+    VEHICLE_SERVICE("سرویس وسیله نقلیه", "وسیله نقلیه"),
     MEETING("جلسه", "جلسات"),
     PROPERTY("ساختمان", "ساختمان"),
     FINANCIAL("مالی", "مالی"),
@@ -46,16 +46,20 @@ private enum class ReminderTemplate(val label: String, val fixedCategory: String
     MEDICATION("دارو و ویتامین", "دارو"),
     PREGNANCY("بارداری", "بارداری"),
     BABY_CARE("نوزاد و کودک", "نوزاد و کودک"),
-    RELIGIOUS("مذهبی", "مذهبی")
+    RELIGIOUS("مذهبی", "مذهبی"),
+    SCHOOL("مدرسه", "مدرسه")
 }
 
-private val CAR_SERVICE_BUILTIN_ITEMS = listOf("تعویض روغن", "تعویض لاستیک", "باتری", "بیمه", "معاینه فنی", "سرویس دوره‌ای")
+private val VEHICLE_SERVICE_BUILTIN_ITEMS = listOf("تعویض روغن", "تعویض لاستیک", "باتری", "بیمه", "معاینه فنی", "سرویس دوره‌ای")
 private val PROPERTY_BUILTIN_ITEMS = listOf("سرویس کولر", "سرویس پکیج", "شارژ ساختمان", "تعمیرات", "بیمه ساختمان")
 private val GENERAL_BUILTIN_CATEGORIES = listOf("قرار ملاقات", "ورزش", "لیست خرید", "کارهای خانه", "عادت روزانه", "کار اداری", "تماس تلفنی", "یادداشت")
 private val BILL_BUILTIN_ITEMS = listOf("آب", "برق", "گاز", "اینترنت", "تلفن ثابت", "تلفن همراه", "تلویزیون/ماهواره", "شهرداری")
 private val RELIGIOUS_BUILTIN_ITEMS = listOf(
     "دعای کمیل (شب جمعه)", "دعای ندبه (صبح جمعه)", "زیارت عاشورا",
     "دعای توسل", "نماز شب", "دعای صباح", "قرائت قرآن"
+)
+private val SCHOOL_BUILTIN_ITEMS = listOf(
+    "جلسه اولیا و مربیان", "امتحان", "تحویل تکلیف", "ثبت‌نام", "خرید لوازم‌التحریر", "کلاس فوق‌برنامه"
 )
 private val PERSIAN_WEEK_DAYS = listOf(
     Calendar.SATURDAY to "شنبه",
@@ -70,7 +74,7 @@ private val PERSIAN_WEEK_DAYS = listOf(
 private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
     if (reminder == null) return ReminderTemplate.GENERAL
     return when {
-        reminder.mileageTargetKm != null -> ReminderTemplate.CAR_SERVICE
+        reminder.mileageTargetKm != null -> ReminderTemplate.VEHICLE_SERVICE
         reminder.location != null -> ReminderTemplate.MEETING
         reminder.financialType != null -> ReminderTemplate.FINANCIAL
         reminder.category == "ساختمان" -> ReminderTemplate.PROPERTY
@@ -79,6 +83,7 @@ private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
         reminder.category == "بارداری" -> ReminderTemplate.PREGNANCY
         reminder.category == "نوزاد و کودک" -> ReminderTemplate.BABY_CARE
         reminder.category == "مذهبی" -> ReminderTemplate.RELIGIOUS
+        reminder.category == "مدرسه" -> ReminderTemplate.SCHOOL
         else -> ReminderTemplate.GENERAL
     }
 }
@@ -359,8 +364,8 @@ fun AddReminderScreen(
                     )
                 }
 
-                ReminderTemplate.CAR_SERVICE -> {
-                    val suggestions = (CAR_SERVICE_BUILTIN_ITEMS + knownItemsByCategory["ماشین"].orEmpty()).distinct()
+                ReminderTemplate.VEHICLE_SERVICE -> {
+                    val suggestions = (VEHICLE_SERVICE_BUILTIN_ITEMS + knownItemsByCategory["وسیله نقلیه"].orEmpty()).distinct()
                     Text("آیتم سرویس", style = MaterialTheme.typography.titleSmall)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(suggestions) { item ->
@@ -394,6 +399,22 @@ fun AddReminderScreen(
                         value = locationText,
                         onValueChange = { locationText = it },
                         label = { Text("محل برگزاری") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                ReminderTemplate.SCHOOL -> {
+                    val suggestions = (SCHOOL_BUILTIN_ITEMS + knownItemsByCategory["مدرسه"].orEmpty()).distinct()
+                    Text("آیتم", style = MaterialTheme.typography.titleSmall)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(suggestions) { item ->
+                            AssistChip(onClick = { title = item }, label = { Text(item) })
+                        }
+                    }
+                    OutlinedTextField(
+                        value = locationText,
+                        onValueChange = { locationText = it },
+                        label = { Text("محل (اختیاری — مثلاً نام مدرسه یا کلاس)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -597,7 +618,7 @@ fun AddReminderScreen(
             ) {
                 Button(
                     onClick = {
-                        if (template == ReminderTemplate.CAR_SERVICE) {
+                        if (template == ReminderTemplate.VEHICLE_SERVICE) {
                             mileageCurrentText.toLongOrNull()?.let { CarPrefs.setCurrentKm(context, it) }
                         }
                         onSave(
@@ -607,12 +628,12 @@ fun AddReminderScreen(
                             categoryColor,
                             triggerMillis,
                             repeatInterval,
-                            if (template == ReminderTemplate.FINANCIAL || template == ReminderTemplate.CAR_SERVICE || template == ReminderTemplate.PROPERTY) amountText.toLongOrNull() else null,
+                            if (template == ReminderTemplate.FINANCIAL || template == ReminderTemplate.VEHICLE_SERVICE || template == ReminderTemplate.PROPERTY) amountText.toLongOrNull() else null,
                             if (template == ReminderTemplate.FINANCIAL) counterparty.ifBlank { null } else null,
                             if (template == ReminderTemplate.FINANCIAL) counterpartyPhone else null,
                             if (template == ReminderTemplate.FINANCIAL) financialType else null,
                             attachmentUri?.toString(),
-                            if (template == ReminderTemplate.CAR_SERVICE) mileageTargetText.toLongOrNull() else null,
+                            if (template == ReminderTemplate.VEHICLE_SERVICE) mileageTargetText.toLongOrNull() else null,
                             if (template == ReminderTemplate.MEETING) locationText.ifBlank { null } else null,
                             if (template == ReminderTemplate.FINANCIAL &&
                                 (financialType == FinancialType.CHECK || financialType == FinancialType.INSTALLMENT)

@@ -63,7 +63,7 @@ fun DashboardScreen(stats: DashboardStats) {
         var kmText by remember { mutableStateOf(currentKm.toString()) }
         AlertDialog(
             onDismissRequest = { showKmDialog = false },
-            title = { Text("به‌روزرسانی کیلومتر ماشین") },
+            title = { Text("به‌روزرسانی کیلومتر وسیله نقلیه") },
             text = {
                 OutlinedTextField(
                     value = kmText,
@@ -98,7 +98,7 @@ private fun CarOdometerCard(currentKm: Long, onEditClick: () -> Unit) {
             Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("کیلومتر فعلی ماشین", style = MaterialTheme.typography.titleSmall)
+                Text("کیلومتر فعلی وسیله نقلیه", style = MaterialTheme.typography.titleSmall)
                 Text("$currentKm کیلومتر", style = MaterialTheme.typography.bodyMedium)
             }
             TextButton(onClick = onEditClick) { Text("به‌روزرسانی") }
