@@ -66,6 +66,7 @@ import ir.naderinia.nsa.util.SecurityPrefs
 import java.util.Calendar
 
 private sealed class ReminderDetailFilter {
+    object Active : ReminderDetailFilter()
     object Today : ReminderDetailFilter()
     object Overdue : ReminderDetailFilter()
     data class Category(val name: String) : ReminderDetailFilter()
@@ -593,7 +594,7 @@ class MainActivity : FragmentActivity() {
                         }
 
                         composable("home") {
-
+                        
                             HomeScreen(
                                 reminders = reminders,
                                 financialReminders = financialReminders,
@@ -623,9 +624,11 @@ class MainActivity : FragmentActivity() {
                                 onSoundClick = {
                                     openRingtonePicker()
                                 },
+
                                 onBackupClick = {
                                     startBackup()
                                 },
+
                                 onRestoreClick = {
                                     startRestore()
                                 },
@@ -634,9 +637,16 @@ class MainActivity : FragmentActivity() {
                                     navController.navigate("about")
                                 },
 
+                                onOpenActive = {
+                                    detailFilter = ReminderDetailFilter.Active
+
+                                    navController.navigate(
+                                        "categoryDetail"
+                                    )
+                                },
+
                                 onOpenToday = {
-                                    detailFilter =
-                                        ReminderDetailFilter.Today
+                                    detailFilter = ReminderDetailFilter.Today
 
                                     navController.navigate(
                                         "categoryDetail"
@@ -644,8 +654,7 @@ class MainActivity : FragmentActivity() {
                                 },
 
                                 onOpenOverdue = {
-                                    detailFilter =
-                                        ReminderDetailFilter.Overdue
+                                    detailFilter = ReminderDetailFilter.Overdue
 
                                     navController.navigate(
                                         "categoryDetail"
@@ -655,9 +664,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenCategory = { category ->
 
                                     detailFilter =
-                                        ReminderDetailFilter.Category(
-                                            category
-                                        )
+                                        ReminderDetailFilter.Category(category)
 
                                     navController.navigate(
                                         "categoryDetail"
@@ -674,21 +681,27 @@ class MainActivity : FragmentActivity() {
                                 detailTitle,
                                 detailReminders
                             ) = when (filter) {
-
+                            
+                                is ReminderDetailFilter.Active ->
+                                    "کارهای فعال" to
+                                        reminders.filter {
+                                            !it.isDone
+                                        }
+                            
                                 is ReminderDetailFilter.Today ->
                                     "امروز" to
                                         dashboardStats.todayItems
-
+                            
                                 is ReminderDetailFilter.Overdue ->
                                     "عقب‌افتاده" to
                                         dashboardStats.overdueItems
-
+                            
                                 is ReminderDetailFilter.Category ->
                                     filter.name to
                                         reminders.filter {
                                             it.category == filter.name
                                         }
-
+                            
                                 null ->
                                     "" to emptyList()
                             }

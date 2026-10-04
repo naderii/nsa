@@ -49,6 +49,7 @@ fun HomeScreen(
     onRestoreClick: () -> Unit,
     onOpenToday: () -> Unit,
     onOpenOverdue: () -> Unit,
+    onOpenActive: () -> Unit,
     onOpenCategory: (String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.REMINDERS) }
@@ -65,48 +66,88 @@ fun HomeScreen(
                 ),
                 actions = {
                     IconButton(onClick = onScanClick) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "اسکن رسید")
+                        Icon(
+                            Icons.Default.CameraAlt,
+                            contentDescription = "اسکن رسید"
+                        )
                     }
+
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "بیشتر")
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "بیشتر"
+                            )
                         }
-                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
                             DropdownMenuItem(
                                 text = { Text("امنیت") },
-                                leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Security,
+                                        contentDescription = null
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     onSecurityClick()
                                 }
                             )
+
                             DropdownMenuItem(
                                 text = { Text("آهنگ هشدار") },
-                                leadingIcon = { Icon(Icons.Default.MusicNote, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.MusicNote,
+                                        contentDescription = null
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     onSoundClick()
                                 }
                             )
+
                             DropdownMenuItem(
                                 text = { Text("تهیه‌ی پشتیبان") },
-                                leadingIcon = { Icon(Icons.Default.Backup, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Backup,
+                                        contentDescription = null
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     onBackupClick()
                                 }
                             )
+
                             DropdownMenuItem(
                                 text = { Text("بازیابی از پشتیبان") },
-                                leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Restore,
+                                        contentDescription = null
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     onRestoreClick()
                                 }
                             )
+
                             DropdownMenuItem(
                                 text = { Text("درباره‌ی اپ") },
-                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
                                     onAboutClick()
@@ -117,52 +158,95 @@ fun HomeScreen(
                 }
             )
         },
+
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.REMINDERS,
-                    onClick = { selectedTab = HomeTab.REMINDERS },
-                    icon = { Icon(Icons.Default.Notifications, contentDescription = null) },
+                    onClick = {
+                        selectedTab = HomeTab.REMINDERS
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null
+                        )
+                    },
                     label = { Text("یادآوری‌ها") }
                 )
+
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.FINANCIAL,
-                    onClick = { selectedTab = HomeTab.FINANCIAL },
-                    icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null) },
+                    onClick = {
+                        selectedTab = HomeTab.FINANCIAL
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.AccountBalanceWallet,
+                            contentDescription = null
+                        )
+                    },
                     label = { Text("مالی") }
                 )
+
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.DASHBOARD,
-                    onClick = { selectedTab = HomeTab.DASHBOARD },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = null) },
+                    onClick = {
+                        selectedTab = HomeTab.DASHBOARD
+                    },
+                    icon = {
+                        Icon(
+                            Icons.Default.Dashboard,
+                            contentDescription = null
+                        )
+                    },
                     label = { Text("داشبورد") }
                 )
             }
         },
+
         floatingActionButton = {
             if (selectedTab == HomeTab.REMINDERS) {
                 ExtendedFloatingActionButton(
                     onClick = onAddClick,
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("یادآوری جدید") }
+                    icon = {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null
+                        )
+                    },
+                    text = {
+                        Text("یادآوری جدید")
+                    }
                 )
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             when (selectedTab) {
+
                 HomeTab.REMINDERS -> RemindersOverview(
                     reminders = reminders,
                     onOpenToday = onOpenToday,
                     onOpenOverdue = onOpenOverdue,
+                    onOpenActive = onOpenActive,
                     onOpenCategory = onOpenCategory
                 )
+
                 HomeTab.FINANCIAL -> FinancialScreen(
                     reminders = financialReminders,
                     summary = financialSummary,
                     onRecordPayment = onRecordPayment
                 )
-                HomeTab.DASHBOARD -> DashboardScreen(stats = dashboardStats)
+
+                HomeTab.DASHBOARD -> DashboardScreen(
+                    stats = dashboardStats
+                )
             }
         }
     }
