@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 
-@Database(entities = [Reminder::class, PaymentLog::class], version = 9, exportSchema = false)
+@Database(entities = [Reminder::class, PaymentLog::class], version = 10, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
@@ -61,6 +61,15 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_category ON reminders(category)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_financialType ON reminders(financialType)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_reminders_triggerAtMillis ON reminders(triggerAtMillis)")
+                }
+            },
+            object : Migration(9, 10) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    // "سرویس خودرو" was renamed to "سرویس وسیله نقلیه" so it also
+                    // covers motorcycles — this is a pure data fix (no column
+                    // change), updating existing rows to the new category name
+                    // so they still show up under the renamed tile/filter.
+                    db.execSQL("UPDATE reminders SET category = 'وسیله نقلیه' WHERE category = 'ماشین'")
                 }
             }
         )

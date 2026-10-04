@@ -31,7 +31,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
@@ -297,6 +299,47 @@ class MainActivity : FragmentActivity() {
                         }
 
                     ringtonePickerLauncher.launch(intent)
+                }
+
+                val scope = rememberCoroutineScope()
+
+                val createBackupLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/json")
+                ) { uri ->
+                    if (uri != null) {
+                        scope.launch {
+                            try {
+                                ir.naderinia.nsa.util.BackupManager.exportToUri(this@MainActivity, uri)
+                                snackbarHostState.showSnackbar("فایل پشتیبان ذخیره شد ✓")
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("تهیه‌ی پشتیبان با خطا مواجه شد")
+                            }
+                        }
+                    }
+                }
+
+                fun startBackup() {
+                    val fileName = "nsa-backup-${System.currentTimeMillis()}.json"
+                    createBackupLauncher.launch(fileName)
+                }
+
+                val restoreBackupLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        scope.launch {
+                            try {
+                                val count = ir.naderinia.nsa.util.BackupManager.importFromUri(this@MainActivity, uri)
+                                snackbarHostState.showSnackbar("$count یادآوری بازیابی شد ✓")
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("فایل پشتیبان قابل‌خواندن نبود")
+                            }
+                        }
+                    }
+                }
+
+                fun startRestore() {
+                    restoreBackupLauncher.launch(arrayOf("application/json"))
                 }
 
                 val permissionItems = buildList {
@@ -579,6 +622,12 @@ class MainActivity : FragmentActivity() {
 
                                 onSoundClick = {
                                     openRingtonePicker()
+                                },
+                                onBackupClick = {
+                                    startBackup()
+                                },
+                                onRestoreClick = {
+                                    startRestore()
                                 },
 
                                 onAboutClick = {
