@@ -94,7 +94,7 @@ fun SecuritySettingsScreen(
                 if (!SecurityPrefs.hasPin(context)) lockEnabled = false
             },
             onConfirm = { pin ->
-                SecurityPrefs.setPin(context, pin)
+                SecurityPrefs.setPin(context, pin.toCharArray())
                 lockEnabled = true
                 showSetPinDialog = false
             }

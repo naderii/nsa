@@ -153,7 +153,7 @@ fun ReminderListContent(
                     )
                 }
                 items(items, key = { it.id }) { reminder ->
-                    Box(modifier = Modifier.animateItemPlacement()) {
+                    Box(modifier = Modifier.animateItem()) {
                         ReminderCard(
                             reminder = reminder,
                             urgency = urgencyFor(reminder, group, currentKm),

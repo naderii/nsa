@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Cake
@@ -15,7 +16,6 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PregnantWoman
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Today
@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.Reminder
+
 
 private data class CategoryTile(
     val label: String,
@@ -43,7 +44,7 @@ private val CATEGORY_TILES = listOf(
     CategoryTile("دارو", "دارو", Icons.Default.Medication),
     CategoryTile("بارداری", "بارداری", Icons.Default.PregnantWoman),
     CategoryTile("نوزاد و کودک", "نوزاد و کودک", Icons.Default.ChildCare),
-    CategoryTile("مذهبی", "مذهبی", Icons.Default.MenuBook),
+    CategoryTile("مذهبی", "مذهبی", Icons.Filled.Book),
     CategoryTile("مدرسه", "مدرسه", Icons.Default.School)
 )
 

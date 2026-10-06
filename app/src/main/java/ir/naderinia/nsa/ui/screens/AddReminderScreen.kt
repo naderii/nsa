@@ -225,7 +225,7 @@ fun AddReminderScreen(
                     value = template.label,
                     onValueChange = {},
                     label = { Text("نوع") },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                    modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 )
                 ExposedDropdownMenu(
                     expanded = templateMenuExpanded,
@@ -297,7 +297,7 @@ fun AddReminderScreen(
                             value = "ماه $pregnancyMonth بارداری",
                             onValueChange = {},
                             label = { Text("ماه بارداری") },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(expanded = pregnancyMenuExpanded, onDismissRequest = { pregnancyMenuExpanded = false }) {
                             (1..9).forEach { m ->
@@ -327,7 +327,7 @@ fun AddReminderScreen(
                             value = if (babyAgeMonth == 0) "بدو تولد" else "$babyAgeMonth ماهگی",
                             onValueChange = {},
                             label = { Text("سن نوزاد") },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(expanded = babyMenuExpanded, onDismissRequest = { babyMenuExpanded = false }) {
                             listOf(0, 2, 4, 6, 9, 12, 15, 18, 24).forEach { m ->
@@ -445,7 +445,7 @@ fun AddReminderScreen(
                             value = financialType.persianLabel(),
                             onValueChange = {},
                             label = { Text("نوع مالی") },
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = financialTypeMenuExpanded,
@@ -538,7 +538,7 @@ fun AddReminderScreen(
                     value = repeatInterval.persianLabel(),
                     onValueChange = {},
                     label = { Text("تکرار") },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                    modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 )
                 ExposedDropdownMenu(
                     expanded = repeatMenuExpanded,

@@ -35,7 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -459,7 +459,7 @@ class MainActivity : FragmentActivity() {
                                     this
                                 ),
 
-                        onPinEntered = { pin ->
+                        onPinEntered = { pin: CharArray ->
 
                             if (
                                 SecurityPrefs.verifyPin(
@@ -899,38 +899,46 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun showBiometricPrompt(
-        onSuccess: () -> Unit
-    ) {
-
-        val executor =
-            ContextCompat.getMainExecutor(this)
-
-        val biometricPrompt =
-            BiometricPrompt(
-                this,
-                executor,
-
-                object :
-                    BiometricPrompt.AuthenticationCallback() {
-
-                    override fun onAuthenticationSucceeded(
-                        result: BiometricPrompt.AuthenticationResult
-                    ) {
-                        onSuccess()
-                    }
+    private fun showBiometricPrompt(onSuccess: () -> Unit) {
+        val executor = ContextCompat.getMainExecutor(this)
+    
+        val callback = object : BiometricPrompt.AuthenticationCallback() {
+        
+            override fun onAuthenticationSucceeded(
+                result: BiometricPrompt.AuthenticationResult
+            ) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+    
+            override fun onAuthenticationError(
+                errorCode: Int,
+                errString: CharSequence
+            ) {
+                super.onAuthenticationError(errorCode, errString)
+    
+                // لغو توسط کاربر یا Back — نیازی به نمایش خطا نیست
+                if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                    errorCode != BiometricPrompt.ERROR_USER_CANCELED
+                ) {
+                    // خطاهای واقعی احراز هویت در اینجا قابل ثبت/نمایش هستند.
                 }
-            )
-
-        val promptInfo =
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle("ورود به یادآور من")
-                .setNegativeButtonText("استفاده از رمز")
-                .build()
-
-        biometricPrompt.authenticate(
-            promptInfo
-        )
+            }
+    
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                // سیستم خودش feedback مربوط به تلاش ناموفق را نمایش می‌دهد.
+            }
+        }
+    
+        val biometricPrompt = BiometricPrompt(this, executor, callback)
+    
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("ورود به یادآور من")
+            .setNegativeButtonText("استفاده از رمز")
+            .build()
+    
+        biometricPrompt.authenticate(promptInfo)
     }
 
     /**
