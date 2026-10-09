@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same exclusions as backup_rules.xml, for Android 11 and older (auto backup). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="security_prefs.xml" />
+    <exclude domain="sharedpref" path="car_prefs.xml" />
+    <exclude domain="sharedpref" path="notification_prefs.xml" />
+    <exclude domain="sharedpref" path="__androidx_security_crypto_encrypted_prefs__.xml" />
+</full-backup-content>

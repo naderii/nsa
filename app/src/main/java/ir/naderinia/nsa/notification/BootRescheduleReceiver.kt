@@ -21,6 +21,7 @@ class BootRescheduleReceiver : BroadcastReceiver() {
                 dao.getAllOnce()
                     .filter { !it.isDone && it.triggerAtMillis > now }
                     .forEach { NotificationScheduler.schedule(context, it) }
+                NotificationScheduler.rescheduleSnoozes(context)
             } finally {
                 pendingResult.finish()
             }

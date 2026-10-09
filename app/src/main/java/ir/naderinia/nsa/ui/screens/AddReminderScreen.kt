@@ -26,7 +26,9 @@ import coil.compose.rememberAsyncImagePainter
 import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
+import ir.naderinia.nsa.ui.components.JalaliDateTimeField
 import ir.naderinia.nsa.ui.components.JalaliDateTimePickerDialog
+import ir.naderinia.nsa.ui.components.WeekDaySelector
 import ir.naderinia.nsa.ui.theme.CategoryColors
 import ir.naderinia.nsa.util.BabyCareGuide
 import ir.naderinia.nsa.util.CarPrefs
@@ -60,15 +62,6 @@ private val RELIGIOUS_BUILTIN_ITEMS = listOf(
 )
 private val SCHOOL_BUILTIN_ITEMS = listOf(
     "جلسه اولیا و مربیان", "امتحان", "تحویل تکلیف", "ثبت‌نام", "خرید لوازم‌التحریر", "کلاس فوق‌برنامه"
-)
-private val PERSIAN_WEEK_DAYS = listOf(
-    Calendar.SATURDAY to "شنبه",
-    Calendar.SUNDAY to "یکشنبه",
-    Calendar.MONDAY to "دوشنبه",
-    Calendar.TUESDAY to "سه‌شنبه",
-    Calendar.WEDNESDAY to "چهارشنبه",
-    Calendar.THURSDAY to "پنجشنبه",
-    Calendar.FRIDAY to "جمعه"
 )
 
 private fun inferTemplate(reminder: Reminder?): ReminderTemplate {
@@ -514,9 +507,10 @@ fun AddReminderScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Button(onClick = { showJalaliDatePicker = true }) {
-                Text("انتخاب تاریخ و ساعت: ${JalaliCalendar.formatDateTime(triggerMillis)}")
-            }
+            JalaliDateTimeField(
+                millis = triggerMillis,
+                onClick = { showJalaliDatePicker = true }
+            )
 
             if (showJalaliDatePicker) {
                 JalaliDateTimePickerDialog(
@@ -558,21 +552,10 @@ fun AddReminderScreen(
 
             if (repeatInterval == RepeatInterval.WEEKLY) {
                 Text("روزهای تکرار (اختیاری، می‌تونی چندتا انتخاب کنی)", style = MaterialTheme.typography.titleSmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(PERSIAN_WEEK_DAYS) { (dayValue, label) ->
-                        FilterChip(
-                            selected = dayValue in selectedWeekDays,
-                            onClick = {
-                                selectedWeekDays = if (dayValue in selectedWeekDays) {
-                                    selectedWeekDays - dayValue
-                                } else {
-                                    selectedWeekDays + dayValue
-                                }
-                            },
-                            label = { Text(label) }
-                        )
-                    }
-                }
+                WeekDaySelector(
+                    selected = selectedWeekDays,
+                    onSelectedChange = { selectedWeekDays = it }
+                )
             }
 
             Text("پیوست (اختیاری) — عکس یا سند", style = MaterialTheme.typography.titleSmall)

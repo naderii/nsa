@@ -18,14 +18,17 @@ data class PermissionUiState(
     val description: String,
     val icon: ImageVector,
     val isGranted: Boolean,
+    /** Required ones gate "everything will work"; optional ones are only recommended. */
+    val isRequired: Boolean = true,
+    /** Text of the card button — e.g. becomes "باز کردن تنظیمات" after a permanent denial. */
+    val actionLabel: String = "اجازه بده",
     val onRequest: () -> Unit
 )
 
 /**
- * Shown once before the main list, whenever an essential permission is
- * still missing. Every item is requested explicitly and individually
- * instead of firing scattered system dialogs at random moments — the
- * person sees exactly what's being asked for and why before granting it.
+ * Shown before the main list whenever a required permission is missing (and once
+ * for optional ones). One big button always performs the *next* missing step, so
+ * the person can just keep tapping it instead of hunting for the right row.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +36,8 @@ fun PermissionOnboardingScreen(
     permissions: List<PermissionUiState>,
     onContinue: () -> Unit
 ) {
-    val allGranted = permissions.all { it.isGranted }
+    val nextPending = permissions.firstOrNull { !it.isGranted }
+    val requiredMissing = permissions.any { it.isRequired && !it.isGranted }
 
     Scaffold(topBar = { TopAppBar(title = { Text("راه‌اندازی اولیه") }) }) { padding ->
         Column(
@@ -55,17 +59,22 @@ fun PermissionOnboardingScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
-                onClick = onContinue,
-                enabled = allGranted,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (allGranted) "شروع کن" else "همه رو بده تا فعال بشه دکمه")
-            }
-
-            if (!allGranted) {
+            if (nextPending != null) {
+                Button(
+                    onClick = nextPending.onRequest,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("مرحله بعد: ${nextPending.title}")
+                }
                 TextButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
-                    Text("فعلاً رد شو (بعضی یادآوری‌ها ممکنه دیر برسن)")
+                    Text(
+                        if (requiredMissing) "فعلاً رد شو (ممکنه یادآوری‌ها نرسن یا دیر برسن)"
+                        else "ادامه بدون این مورد (فقط پیشنهادی بود)"
+                    )
+                }
+            } else {
+                Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
+                    Text("شروع کن")
                 }
             }
         }
@@ -87,13 +96,16 @@ private fun PermissionCard(permission: PermissionUiState) {
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(permission.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (permission.isRequired) permission.title else "${permission.title} (پیشنهادی)",
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Text(permission.description, style = MaterialTheme.typography.bodySmall)
             }
             if (permission.isGranted) {
                 Icon(Icons.Default.CheckCircle, contentDescription = "داده‌شده", tint = Color(0xFF2E7D32))
             } else {
-                TextButton(onClick = permission.onRequest) { Text("اجازه بده") }
+                TextButton(onClick = permission.onRequest) { Text(permission.actionLabel) }
             }
         }
     }

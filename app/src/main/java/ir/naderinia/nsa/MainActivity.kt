@@ -1,10 +1,13 @@
 package ir.naderinia.nsa
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -14,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
+import androidx.core.app.ActivityCompat
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -32,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
@@ -57,10 +62,13 @@ import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
 import ir.naderinia.nsa.ui.screens.PermissionUiState
 import ir.naderinia.nsa.ui.screens.ScanReceiptScreen
 import ir.naderinia.nsa.ui.screens.SecuritySettingsScreen
+import ir.naderinia.nsa.ui.components.CrashReportDialog
 import ir.naderinia.nsa.ui.screens.WhatsNewScreen
 import ir.naderinia.nsa.ui.theme.NsaTheme
 import ir.naderinia.nsa.util.Changelog
 import ir.naderinia.nsa.util.ChangelogPrefs
+import ir.naderinia.nsa.util.CrashReporter
+import ir.naderinia.nsa.util.OnboardingPrefs
 import ir.naderinia.nsa.util.PermissionStatus
 import ir.naderinia.nsa.util.SecurityPrefs
 import java.util.Calendar
@@ -137,6 +145,10 @@ class MainActivity : FragmentActivity() {
                     )
                 }
 
+                // true after Android stops showing the notification dialog (denied twice):
+                // from then on the only way is the app's system notification settings.
+                var notifBlocked by rememberSaveable { mutableStateOf(false) }
+
                 var exactAlarmGranted by remember {
                     mutableStateOf(
                         PermissionStatus.canScheduleExactAlarms(this)
@@ -195,6 +207,8 @@ class MainActivity : FragmentActivity() {
                                         this@MainActivity
                                     )
 
+                                if (notifGranted) notifBlocked = false
+
                                 exactAlarmGranted =
                                     PermissionStatus.canScheduleExactAlarms(
                                         this@MainActivity
@@ -204,6 +218,17 @@ class MainActivity : FragmentActivity() {
                                     PermissionStatus.isIgnoringBatteryOptimizations(
                                         this@MainActivity
                                     )
+
+                                // Some ROMs flip these flags a moment after returning from the
+                                // system dialog — look once more so the screen never shows stale state.
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    notifGranted =
+                                        PermissionStatus.hasNotificationPermission(this@MainActivity)
+                                    exactAlarmGranted =
+                                        PermissionStatus.canScheduleExactAlarms(this@MainActivity)
+                                    batteryExempt =
+                                        PermissionStatus.isIgnoringBatteryOptimizations(this@MainActivity)
+                                }, 800L)
 
                                 val lockEnabled = SecurityPrefs.isLockEnabled(this@MainActivity)
 
@@ -240,6 +265,17 @@ class MainActivity : FragmentActivity() {
                         ActivityResultContracts.RequestPermission()
                     ) { granted ->
                         notifGranted = granted
+                        // No rationale + not granted right after asking = permanently denied;
+                        // further launch() calls would silently do nothing.
+                        if (!granted &&
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            !ActivityCompat.shouldShowRequestPermissionRationale(
+                                this@MainActivity,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            )
+                        ) {
+                            notifBlocked = true
+                        }
                     }
 
                 val ringtonePickerLauncher =
@@ -353,10 +389,15 @@ class MainActivity : FragmentActivity() {
                                 description = "بدون این، یادآوری اصلاً نشون داده نمی‌شه",
                                 icon = Icons.Default.Notifications,
                                 isGranted = notifGranted,
+                                actionLabel = if (notifBlocked) "باز کردن تنظیمات" else "اجازه بده",
                                 onRequest = {
-                                    requestNotificationPermission.launch(
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    )
+                                    if (notifBlocked) {
+                                        openAppNotificationSettings()
+                                    } else {
+                                        requestNotificationPermission.launch(
+                                            Manifest.permission.POST_NOTIFICATIONS
+                                        )
+                                    }
                                 }
                             )
                         )
@@ -371,8 +412,7 @@ class MainActivity : FragmentActivity() {
                                 icon = Icons.Default.Alarm,
                                 isGranted = exactAlarmGranted,
                                 onRequest = {
-
-                                    startActivity(
+                                    startActivitySafely(
                                         Intent(
                                             Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
                                         ).apply {
@@ -390,9 +430,10 @@ class MainActivity : FragmentActivity() {
                     add(
                         PermissionUiState(
                             title = "معافیت از بهینه‌سازی باتری",
-                            description = "تا گوشی اپ رو در پس‌زمینه نکشه و یادآوری گم نشه",
+                            description = "تا گوشی اپ رو در پس‌زمینه نکشه و یادآوری گم نشه (روی بعضی گوشی‌ها مثل شیائومی و هواوی خیلی مهمه)",
                             icon = Icons.Default.BatteryAlert,
                             isGranted = batteryExempt,
+                            isRequired = false,
                             onRequest = {
                                 requestBatteryOptimizationExemption()
                             }
@@ -491,6 +532,26 @@ class MainActivity : FragmentActivity() {
                     return@NsaTheme
                 }
 
+                // Crash report from the previous run (if any) — shown after the lock screen.
+                var pendingCrash by remember {
+                    mutableStateOf(CrashReporter.readPending(this@MainActivity))
+                }
+
+                pendingCrash?.let { report ->
+                    CrashReportDialog(
+                        report = report,
+                        onSend = {
+                            CrashReporter.sendByEmail(this@MainActivity, report)
+                            CrashReporter.clearPending(this@MainActivity)
+                            pendingCrash = null
+                        },
+                        onDismiss = {
+                            CrashReporter.clearPending(this@MainActivity)
+                            pendingCrash = null
+                        }
+                    )
+                }
+
                 val pendingChangelog = remember {
                     Changelog.since(
                         ChangelogPrefs.getLastSeenVersion(
@@ -499,17 +560,25 @@ class MainActivity : FragmentActivity() {
                     )
                 }
 
-                val startDestination = when {
+                // Decided once per launch: granting/revoking something later must not
+                // rebuild the nav graph under the person's feet.
+                val startDestination = remember {
+                    val requiredMissing =
+                        permissionItems.any { it.isRequired && !it.isGranted }
+                    val optionalMissing =
+                        permissionItems.any { !it.isRequired && !it.isGranted }
 
-                    !permissionItems.all {
-                        it.isGranted
-                    } -> "onboarding"
+                    when {
+                        requiredMissing ||
+                            (optionalMissing && !OnboardingPrefs.isSeen(this@MainActivity)) ->
+                            "onboarding"
 
-                    pendingChangelog.isNotEmpty() ->
-                        "whatsnew"
+                        pendingChangelog.isNotEmpty() ->
+                            "whatsnew"
 
-                    else ->
-                        "home"
+                        else ->
+                            "home"
+                    }
                 }
 
                 Scaffold(
@@ -534,6 +603,8 @@ class MainActivity : FragmentActivity() {
                                 permissions = permissionItems,
 
                                 onContinue = {
+
+                                    OnboardingPrefs.setSeen(this@MainActivity)
 
                                     val next =
                                         if (
@@ -968,7 +1039,43 @@ class MainActivity : FragmentActivity() {
                         )
                 }
 
-            startActivity(intent)
+            // Some OEM ROMs don't ship that dialog — fall back to the general list.
+            startActivitySafely(
+                intent,
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            )
+        }
+    }
+
+    private fun openAppNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+        startActivitySafely(intent)
+    }
+
+    /**
+     * Opens a system settings screen without ever crashing the app: if the
+     * primary intent (or the optional fallback) isn't available on this device,
+     * ends up on the app's own details page, which exists everywhere.
+     */
+    private fun startActivitySafely(primary: Intent, fallback: Intent? = null) {
+        val attempts = listOfNotNull(
+            primary,
+            fallback,
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
+        for (intent in attempts) {
+            try {
+                startActivity(intent)
+                return
+            } catch (_: ActivityNotFoundException) {
+                // try the next one
+            } catch (_: SecurityException) {
+                // try the next one
+            }
         }
     }
 }
