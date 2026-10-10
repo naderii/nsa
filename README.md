@@ -36,7 +36,7 @@
 پیش‌نیازها: JDK 17، Android SDK Command Line Tools (نصب کامل Android Studio ضروری نیست).
 
 ```bash
-git clone <آدرس ریپوی شما روی GitLab>
+git clone https://github.com/naderii/nsa
 cd nsa
 ```
 
