@@ -10,26 +10,25 @@ plugins {
 
 android {
     namespace = "ir.naderinia.nsa"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "ir.naderinia.nsa"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 19
-        versionName = "0.16.0"
+        targetSdk = 35
+
+        versionCode = 29
+        versionName = "0.22.2"
     }
 
-    // Reads signing secrets from keystore.properties, a file that never gets
-    // committed to git (see .gitignore). This keeps the actual store/key
-    // passwords out of version control entirely — only you have them, on
-    // your own machine. See RELEASE.md for how to generate the keystore and
-    // this properties file.
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keystoreProperties = Properties()
     val hasSigningConfig = keystorePropertiesFile.exists()
+
     if (hasSigningConfig) {
-        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+        FileInputStream(keystorePropertiesFile).use {
+            keystoreProperties.load(it)
+        }
     }
 
     signingConfigs {
@@ -54,10 +53,6 @@ android {
             if (hasSigningConfig) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            // Without hasSigningConfig, a release build still compiles (useful
-            // to sanity-check R8 locally) but produces an unsigned artifact —
-            // Gradle will refuse to let you install/publish it until you add
-            // keystore.properties, which is the intended safety net.
         }
     }
 
@@ -83,43 +78,51 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
-    implementation("androidx.activity:activity-compose:1.9.1")
 
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    // AndroidX
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
+
+    // Jetpack Compose
+    implementation(platform("androidx.compose:compose-bom:2025.05.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.9.0")
 
-    // Local persistence
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // Room
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.room:room-ktx:2.7.1")
+    ksp("androidx.room:room-compiler:2.7.1")
 
-    // Kotlin coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Kotlin Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
-    // App lock: PIN + biometric
+    // App Lock - PIN / Biometric
     implementation("androidx.biometric:biometric:1.1.0")
-    implementation("androidx.fragment:fragment-ktx:1.8.2")
+    implementation("androidx.fragment:fragment-ktx:1.8.8")
 
-    // Encrypted SharedPreferences (PIN hash, car odometer, notification sound choice)
+    // Encrypted SharedPreferences (نگه داشته شده روی stable)
     implementation("androidx.security:security-crypto:1.0.0")
 
-    // On-device (free, no API key, works offline) text recognition for receipt scanning
-    implementation("com.google.mlkit:text-recognition:16.0.0")
+    // ML Kit
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
-    // Lightweight image loading for displaying the captured receipt photo
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    // Coil - فعلاً روی 2.x نگه داشته شده (Coil 3 نیاز به refactor داره)
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Unit tests
     testImplementation("junit:junit:4.13.2")
+
+    // Instrumentation tests
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

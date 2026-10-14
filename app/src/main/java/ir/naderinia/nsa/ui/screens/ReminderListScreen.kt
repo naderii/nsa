@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,16 +23,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import ir.naderinia.nsa.data.MedicationLog
 import ir.naderinia.nsa.data.Reminder
+import ir.naderinia.nsa.data.parseChecklist
+import ir.naderinia.nsa.data.serializeChecklist
+import ir.naderinia.nsa.data.persianLabel
 import ir.naderinia.nsa.ui.theme.onSuccessContainerColor
 import ir.naderinia.nsa.ui.theme.successContainerColor
 import ir.naderinia.nsa.util.CarPrefs
 import ir.naderinia.nsa.util.JalaliCalendar
+import ir.naderinia.nsa.util.grouped
 import java.util.Calendar
 
 private enum class ReminderGroup(val label: String) {
@@ -81,12 +90,16 @@ private fun urgencyFor(reminder: Reminder, group: ReminderGroup, currentKm: Long
  * bottom nav bar + the "add" FAB).
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun ReminderListContent(
     reminders: List<Reminder>,
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit,
-    onEdit: (Reminder) -> Unit
+    onEdit: (Reminder) -> Unit,
+    medicationLogs: List<MedicationLog> = emptyList(),
+    onMedicationTaken: (Reminder) -> Unit = {},
+    onChecklistChange: (Reminder, String?) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val currentKm = remember { CarPrefs.getCurrentKm(context) }
@@ -133,7 +146,7 @@ fun ReminderListContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         orderedGroups.forEach { group ->
@@ -149,14 +162,19 @@ fun ReminderListContent(
                     )
                 }
                 items(items, key = { it.id }) { reminder ->
-                    ReminderCard(
-                        reminder = reminder,
-                        urgency = urgencyFor(reminder, group, currentKm),
-                        onToggleDone = onToggleDone,
-                        onDelete = onDelete,
-                        onRecordPayment = onRecordPayment,
-                        onEdit = onEdit
-                    )
+                    Box(modifier = Modifier.animateItem()) {
+                        ReminderCard(
+                            reminder = reminder,
+                            urgency = urgencyFor(reminder, group, currentKm),
+                            onToggleDone = onToggleDone,
+                            onDelete = onDelete,
+                            onRecordPayment = onRecordPayment,
+                            onEdit = onEdit,
+                            medicationLogs = medicationLogs,
+                            onMedicationTaken = onMedicationTaken,
+                            onChecklistChange = onChecklistChange
+                        )
+                    }
                 }
             }
         }
@@ -170,10 +188,23 @@ private fun ReminderCard(
     onToggleDone: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit,
-    onEdit: (Reminder) -> Unit
+    onEdit: (Reminder) -> Unit,
+    medicationLogs: List<MedicationLog>,
+    onMedicationTaken: (Reminder) -> Unit,
+    onChecklistChange: (Reminder, String?) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showPaymentDialog by remember { mutableStateOf(false) }
+    var checklistExpanded by remember { mutableStateOf(false) }
+    val checklistItems = remember(reminder.checklist) { parseChecklist(reminder.checklist) }
+    val dosesTakenToday = remember(medicationLogs, reminder.id) {
+        val today = Calendar.getInstance()
+        medicationLogs.count {
+            it.reminderId == reminder.id &&
+                isSameDay(Calendar.getInstance().apply { timeInMillis = it.takenAtMillis }, today)
+        }
+    }
 
     val containerColor = when (urgency) {
         Urgency.RED -> MaterialTheme.colorScheme.errorContainer
@@ -240,6 +271,27 @@ private fun ReminderCard(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
+                        val estimateDays = remember(reminder.mileageTargetKm) {
+                            CarPrefs.estimateDaysUntil(context, reminder.mileageTargetKm)
+                        }
+                        if (!reminder.isDone && estimateDays != null) {
+                            Text(
+                                text = when {
+                                    estimateDays <= 0L -> "طبق میانگین رانندگیت موعدش رسیده"
+                                    estimateDays <= 60L -> "تخمین: حدود $estimateDays روز دیگه به این کیلومتر می‌رسی"
+                                    else -> "تخمین: حدود ${estimateDays / 30} ماه دیگه به این کیلومتر می‌رسی"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    if (reminder.category == "تولد و سالگرد" && !reminder.isDone) {
+                        Text(
+                            text = birthdayLine(reminder),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     if (reminder.location != null) {
                         Text(
@@ -250,17 +302,26 @@ private fun ReminderCard(
                     if (reminder.amount != null) {
                         val remaining = reminder.amount - reminder.amountPaid
                         val financialLine = buildString {
-                            append("مبلغ: ${reminder.amount} تومان")
+                            append("مبلغ: ${reminder.amount.grouped()} تومان")
                             reminder.counterparty?.let { append(" • $it") }
                             reminder.bankName?.let { append(" • بانک $it") }
+                            reminder.checkStatus?.let { append(" • ${it.persianLabel()}") }
                             if (reminder.amountPaid > 0 && !reminder.isDone) {
-                                append(" • باقی‌مانده: $remaining")
+                                append(" • باقی‌مانده: ${remaining.grouped()}")
                             }
                         }
                         Text(text = financialLine, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Checkbox(checked = reminder.isDone, onCheckedChange = { onToggleDone(reminder) })
+                Checkbox(
+                    checked = reminder.isDone,
+                    onCheckedChange = {
+                        if (!reminder.isDone) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onToggleDone(reminder)
+                    }
+                )
                 IconButton(onClick = { onEdit(reminder) }) {
                     Icon(Icons.Default.Edit, contentDescription = "ویرایش")
                 }
@@ -279,6 +340,75 @@ private fun ReminderCard(
                     Text("ثبت پرداخت")
                 }
             }
+
+            if (reminder.category == "دارو" && !reminder.isDone) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (dosesTakenToday > 0) "امروز $dosesTakenToday بار خوردی ✓" else "امروز هنوز ثبت نکردی",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onMedicationTaken(reminder)
+                        }
+                    ) {
+                        Text("خوردم ✓")
+                    }
+                }
+            }
+
+            if (checklistItems.isNotEmpty()) {
+                val doneCount = checklistItems.count { it.done }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { checklistExpanded = !checklistExpanded }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "چک‌لیست: $doneCount از ${checklistItems.size}",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(if (checklistExpanded) "▲" else "▼", style = MaterialTheme.typography.labelMedium)
+                }
+                if (checklistExpanded) {
+                    checklistItems.forEachIndexed { index, item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val updated = checklistItems.toMutableList()
+                                    updated[index] = item.copy(done = !item.done)
+                                    onChecklistChange(reminder, serializeChecklist(updated))
+                                }
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = item.done,
+                                onCheckedChange = { checked ->
+                                    val updated = checklistItems.toMutableList()
+                                    updated[index] = item.copy(done = checked)
+                                    onChecklistChange(reminder, serializeChecklist(updated))
+                                }
+                            )
+                            Text(
+                                text = item.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textDecoration = if (item.done) TextDecoration.LineThrough else null
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
         }
     }
 
@@ -291,6 +421,36 @@ private fun ReminderCard(
                 showPaymentDialog = false
             }
         )
+    }
+}
+
+/** "۳۵ ساله می‌شه • ۱۲ روز دیگه" — or just the countdown when the birth year isn't known. */
+internal fun birthdayLine(reminder: Reminder): String {
+    val todayStart = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val targetStart = Calendar.getInstance().apply {
+        timeInMillis = reminder.triggerAtMillis
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val days = Math.round((targetStart - todayStart) / 86_400_000.0).toInt()
+
+    val countdown = when {
+        days == 0 -> "امروزه 🎂"
+        days < 0 -> "${JalaliCalendar.toPersianDigits((-days).toString())} روز پیش"
+        days == 1 -> "فردا"
+        else -> "$days روز دیگه"
+    }
+
+    val age = reminder.birthYear?.let {
+        JalaliCalendar.millisToJalali(reminder.triggerAtMillis).year - it
+    }?.takeIf { it > 0 }
+
+    return when {
+        age == null -> countdown
+        days == 0 -> "$age ساله شد • $countdown"
+        days < 0 -> "$age ساله شد • $countdown"
+        else -> "$age ساله می‌شه • $countdown"
     }
 }
 
@@ -323,7 +483,7 @@ private fun PaymentDialog(
         title = { Text("ثبت پرداخت") },
         text = {
             Column {
-                Text("باقی‌مانده فعلی: $remaining تومان")
+                Text("باقی‌مانده فعلی: ${remaining.toLong().grouped()} تومان")
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = amountText,

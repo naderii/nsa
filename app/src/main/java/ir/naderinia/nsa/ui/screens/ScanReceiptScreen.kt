@@ -58,7 +58,7 @@ fun ScanReceiptScreen(
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
-    ) { success -> if (success) imageUri?.let { runOcr(it) } }
+    ) { success -> if (success) imageUri?.let { runOcr(it) } else imageUri = null }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()

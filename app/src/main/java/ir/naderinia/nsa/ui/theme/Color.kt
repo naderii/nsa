@@ -1,6 +1,7 @@
 package ir.naderinia.nsa.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // A deliberately chosen modern palette (indigo + teal + amber) instead of
 // relying on Android's wallpaper-derived "Material You" dynamic colors,
@@ -82,10 +83,16 @@ val CategoryColors = listOf(
     0xFFDB2777L  // صورتی - شخصی
 )
 
+// Based on the *active* color scheme (not the phone's setting), so a manual
+// light/dark choice in the app is respected too.
+@androidx.compose.runtime.Composable
+private fun isDarkScheme(): Boolean =
+    androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f
+
 @androidx.compose.runtime.Composable
 fun successContainerColor(): Color =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) DarkSuccessContainer else LightSuccessContainer
+    if (isDarkScheme()) DarkSuccessContainer else LightSuccessContainer
 
 @androidx.compose.runtime.Composable
 fun onSuccessContainerColor(): Color =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) DarkOnSuccessContainer else LightOnSuccessContainer
+    if (isDarkScheme()) DarkOnSuccessContainer else LightOnSuccessContainer

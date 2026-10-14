@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 fun LockScreen(
     error: String?,
     showBiometricButton: Boolean,
-    onPinEntered: (String) -> Unit,
+    onPinEntered: (CharArray) -> Unit,
     onBiometricClick: () -> Unit
 ) {
     var pin by remember { mutableStateOf("") }
@@ -66,7 +66,7 @@ fun LockScreen(
                                         if (pin.length < 4) {
                                             pin += key
                                             if (pin.length == 4) {
-                                                val entered = pin
+                                                val entered = pin.toCharArray()
                                                 pin = ""
                                                 onPinEntered(entered)
                                             }

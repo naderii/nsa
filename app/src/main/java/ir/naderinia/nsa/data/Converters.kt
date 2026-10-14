@@ -14,4 +14,11 @@ class Converters {
 
     @TypeConverter
     fun toFinancialType(value: String?): FinancialType? = value?.let { FinancialType.valueOf(it) }
+
+    @TypeConverter
+    fun fromCheckStatus(value: CheckStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toCheckStatus(value: String?): CheckStatus? =
+        value?.let { runCatching { CheckStatus.valueOf(it) }.getOrNull() }
 }

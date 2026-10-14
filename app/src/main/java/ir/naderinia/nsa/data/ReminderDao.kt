@@ -38,6 +38,9 @@ interface ReminderDao {
     @Delete
     suspend fun delete(reminder: Reminder)
 
+    @Query("UPDATE reminders SET checklist = :checklist WHERE id = :id")
+    suspend fun updateChecklist(id: Long, checklist: String?)
+
     @Query("DELETE FROM reminders WHERE id = :id")
     suspend fun deleteById(id: Long)
 }

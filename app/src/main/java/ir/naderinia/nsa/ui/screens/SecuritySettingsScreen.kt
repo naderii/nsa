@@ -94,7 +94,7 @@ fun SecuritySettingsScreen(
                 if (!SecurityPrefs.hasPin(context)) lockEnabled = false
             },
             onConfirm = { pin ->
-                SecurityPrefs.setPin(context, pin)
+                SecurityPrefs.setPin(context, pin.toCharArray())
                 lockEnabled = true
                 showSetPinDialog = false
             }
@@ -115,15 +115,30 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             Column {
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pin = it },
+                    onValueChange = {
+                        // Persian keyboards type ۱۲۳۴; the lock keypad uses 1234 → always store ASCII.
+                        val v = asciiDigits(it)
+                        if (v.length <= 4 && v.all { c -> c in '0'..'9' }) pin = v
+                    },
                     label = { Text("رمز جدید") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = confirmPin,
-                    onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) confirmPin = it },
+                    onValueChange = {
+                        val v = asciiDigits(it)
+                        if (v.length <= 4 && v.all { c -> c in '0'..'9' }) confirmPin = v
+                    },
                     label = { Text("تکرار رمز") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 error?.let {
@@ -143,4 +158,17 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
     )
+}
+
+/** Persian (۰-۹) and Arabic-Indic (٠-٩) digits → 0-9. */
+private fun asciiDigits(input: String): String = buildString {
+    for (c in input) {
+        append(
+            when (c) {
+                in '\u06F0'..'\u06F9' -> '0' + (c - '\u06F0')
+                in '\u0660'..'\u0669' -> '0' + (c - '\u0660')
+                else -> c
+            }
+        )
+    }
 }

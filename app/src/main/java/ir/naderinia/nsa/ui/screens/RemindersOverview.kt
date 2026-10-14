@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Cake
@@ -15,8 +16,8 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PregnantWoman
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,12 +26,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.Reminder
+import ir.naderinia.nsa.data.sectionKey
 
-private data class CategoryTile(val label: String, val categoryKey: String, val icon: ImageVector)
+
+private data class CategoryTile(
+    val label: String,
+    val categoryKey: String,
+    val icon: ImageVector
+)
 
 private val CATEGORY_TILES = listOf(
     CategoryTile("عمومی", "عمومی", Icons.Default.ChecklistRtl),
-    CategoryTile("سرویس خودرو", "ماشین", Icons.Default.DirectionsCar),
+    CategoryTile("سرویس وسیله نقلیه", "وسیله نقلیه", Icons.Default.DirectionsCar),
     CategoryTile("جلسات", "جلسات", Icons.Default.Groups),
     CategoryTile("ساختمان", "ساختمان", Icons.Default.Apartment),
     CategoryTile("مالی", "مالی", Icons.Default.AccountBalanceWallet),
@@ -38,7 +45,8 @@ private val CATEGORY_TILES = listOf(
     CategoryTile("دارو", "دارو", Icons.Default.Medication),
     CategoryTile("بارداری", "بارداری", Icons.Default.PregnantWoman),
     CategoryTile("نوزاد و کودک", "نوزاد و کودک", Icons.Default.ChildCare),
-    CategoryTile("مذهبی", "مذهبی", Icons.Default.MenuBook)
+    CategoryTile("مذهبی", "مذهبی", Icons.Filled.Book),
+    CategoryTile("مدرسه", "مدرسه", Icons.Default.School)
 )
 
 @Composable
@@ -46,31 +54,63 @@ fun RemindersOverview(
     reminders: List<Reminder>,
     onOpenToday: () -> Unit,
     onOpenOverdue: () -> Unit,
+    onOpenActive: () -> Unit,
     onOpenCategory: (String) -> Unit
 ) {
     val active = reminders.filter { !it.isDone }
     val now = System.currentTimeMillis()
-    val todayCount = active.count { it.triggerAtMillis in now..(now + 24L * 60 * 60 * 1000) }
-    val overdueCount = active.count { it.triggerAtMillis < now }
+
+    // Same rule as the «امروز» list: still ahead of now AND on today's calendar date.
+    val todayCal = java.util.Calendar.getInstance()
+    val todayCount = active.count {
+        val c = java.util.Calendar.getInstance().apply { timeInMillis = it.triggerAtMillis }
+        it.triggerAtMillis >= now &&
+            c.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+            c.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR)
+    }
+
+    val overdueCount = active.count {
+        it.triggerAtMillis < now
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+
+        // همه کارهای فعال
         item(span = { GridItemSpan(2) }) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Card(
+                onClick = onOpenActive,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
                     Text(
                         "${active.size} کار فعال داری",
                         style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        "برای مشاهده همه کارهای فعال لمس کنید",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
         }
 
+        // امروز
         item {
             QuickTile(
                 label = "امروز",
@@ -80,6 +120,8 @@ fun RemindersOverview(
                 onClick = onOpenToday
             )
         }
+
+        // عقب‌افتاده
         item {
             QuickTile(
                 label = "عقب‌افتاده",
@@ -90,14 +132,20 @@ fun RemindersOverview(
             )
         }
 
+        // دسته‌بندی‌ها
         items(CATEGORY_TILES) { tile ->
-            val count = active.count { it.category == tile.categoryKey }
+            val count = active.count {
+                it.sectionKey() == tile.categoryKey
+            }
+
             QuickTile(
                 label = tile.label,
                 count = count,
                 icon = tile.icon,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                onClick = { onOpenCategory(tile.categoryKey) }
+                onClick = {
+                    onOpenCategory(tile.categoryKey)
+                }
             )
         }
     }
@@ -113,16 +161,32 @@ private fun QuickTile(
 ) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor
+        )
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, contentDescription = null)
+            Icon(
+                imageVector = icon,
+                contentDescription = null
+            )
+
             Spacer(modifier = Modifier.height(6.dp))
-            Text(label, style = MaterialTheme.typography.titleSmall)
-            Text("$count مورد", style = MaterialTheme.typography.bodySmall)
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Text(
+                text = "$count مورد",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

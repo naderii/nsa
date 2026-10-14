@@ -1,5 +1,9 @@
 package ir.naderinia.nsa.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -18,13 +22,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ir.naderinia.nsa.data.CheckStatus
 import ir.naderinia.nsa.data.FinancialType
+import ir.naderinia.nsa.data.PaymentLog
+import ir.naderinia.nsa.data.persianLabel
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.ui.FinancialSummary
 import ir.naderinia.nsa.util.JalaliCalendar
+import ir.naderinia.nsa.util.grouped
 
 /**
  * No Scaffold/TopAppBar here: this screen is embedded as a tab inside
@@ -35,32 +44,45 @@ import ir.naderinia.nsa.util.JalaliCalendar
 fun FinancialScreen(
     reminders: List<Reminder>,
     summary: FinancialSummary,
-    onRecordPayment: (Reminder, Long) -> Unit
+    selectedFilter: FinancialType?, // null = all
+    onFilterChange: (FinancialType?) -> Unit,
+    paymentLogs: List<PaymentLog>,
+    onCheckStatusChange: (Reminder, CheckStatus?) -> Unit,
+    onRecordPayment: (Reminder, Long) -> Unit,
+    onReportClick: () -> Unit
 ) {
-    var selectedFilter by remember { mutableStateOf<FinancialType?>(null) } // null = all
 
     val filtered = if (selectedFilter == null) reminders else reminders.filter { it.financialType == selectedFilter }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { SummaryCard(summary) }
+
+        item {
+            OutlinedButton(
+                onClick = onReportClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("گزارش ماهانه و خروجی PDF / اکسل")
+            }
+        }
 
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     FilterChip(
                         selected = selectedFilter == null,
-                        onClick = { selectedFilter = null },
+                        onClick = { onFilterChange(null) },
                         label = { Text("همه") }
                     )
                 }
                 items(FinancialType.entries.toList()) { type ->
                     FilterChip(
                         selected = selectedFilter == type,
-                        onClick = { selectedFilter = type },
+                        onClick = { onFilterChange(type) },
                         label = { Text(type.label()) }
                     )
                 }
@@ -79,7 +101,12 @@ fun FinancialScreen(
             }
         } else {
             items(filtered, key = { it.id }) { reminder ->
-                FinancialItemCard(reminder, onRecordPayment)
+                FinancialItemCard(
+                    reminder = reminder,
+                    logs = paymentLogs,
+                    onRecordPayment = onRecordPayment,
+                    onCheckStatusChange = onCheckStatusChange
+                )
             }
         }
     }
@@ -115,7 +142,7 @@ private fun SummaryCard(summary: FinancialSummary) {
             Spacer(modifier = Modifier.height(16.dp))
             val netColor = if (summary.net >= 0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
             Text(
-                text = "مانده‌ی خالص: ${if (summary.net >= 0) "+" else ""}${summary.net} تومان",
+                text = "مانده‌ی خالص: ${if (summary.net >= 0) "+" else ""}${summary.net.grouped()} تومان",
                 style = MaterialTheme.typography.titleMedium,
                 color = netColor
             )
@@ -127,21 +154,28 @@ private fun SummaryCard(summary: FinancialSummary) {
 private fun SummaryStat(label: String, value: Long, color: Color, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Text(label, style = MaterialTheme.typography.bodySmall)
-        Text("$value تومان", style = MaterialTheme.typography.titleLarge, color = color)
+        Text("${value.grouped()} تومان", style = MaterialTheme.typography.titleLarge, color = color)
     }
 }
 
 @Composable
 private fun FinancialItemCard(
     reminder: Reminder,
-    onRecordPayment: (Reminder, Long) -> Unit
+    logs: List<PaymentLog>,
+    onRecordPayment: (Reminder, Long) -> Unit,
+    onCheckStatusChange: (Reminder, CheckStatus?) -> Unit
 ) {
+    val context = LocalContext.current
     val showDialog = remember { mutableStateOf(false) }
     val amountText = remember { mutableStateOf("") }
+    var showHistory by remember { mutableStateOf(false) }
+    var messageMenuExpanded by remember { mutableStateOf(false) }
     val total = reminder.amount ?: 0
     val remaining = total - reminder.amountPaid
     val progress = if (total > 0) (reminder.amountPaid.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
     val type = reminder.financialType ?: FinancialType.DEBT
+    val myLogs = remember(logs, reminder.id) { logs.filter { it.reminderId == reminder.id } }
+    val phone = reminder.counterpartyPhone
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
@@ -159,7 +193,10 @@ private fun FinancialItemCard(
                         Text(text = it, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                if (reminder.isDone) {
+                val statusLabel = if (type == FinancialType.CHECK) reminder.checkStatus?.persianLabel() else null
+                if (statusLabel != null) {
+                    AssistChip(onClick = {}, enabled = false, label = { Text(statusLabel) })
+                } else if (reminder.isDone) {
                     AssistChip(onClick = {}, enabled = false, label = { Text("تسویه شده") })
                 }
             }
@@ -179,21 +216,94 @@ private fun FinancialItemCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "باقی‌مانده: $remaining از $total تومان",
+                    text = "باقی‌مانده: ${remaining.toLong().grouped()} از ${total.toLong().grouped()} تومان",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
 
+            // Also shown for a settled cheque: a mistaken "passed" tap (or a bounce) must be fixable.
+            if (type == FinancialType.CHECK) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("وضعیت چک", style = MaterialTheme.typography.labelMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(CheckStatus.entries.toList()) { status ->
+                        val selected = reminder.checkStatus == status
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onCheckStatusChange(reminder, if (selected) null else status) },
+                            label = { Text(status.persianLabel()) }
+                        )
+                    }
+                }
+            }
+
+            if (myLogs.isNotEmpty()) {
+                TextButton(onClick = { showHistory = !showHistory }) {
+                    Text(
+                        if (showHistory) "بستن سابقه‌ی پرداخت‌ها"
+                        else "سابقه‌ی پرداخت‌ها (${myLogs.size})"
+                    )
+                }
+                if (showHistory) {
+                    myLogs.forEach { log ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                JalaliCalendar.formatDate(log.timestampMillis),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "${log.amount.grouped()} تومان",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
             if (!reminder.isDone) {
-                TextButton(
-                    onClick = {
-                        amountText.value = ""
-                        showDialog.value = true
-                    },
-                    modifier = Modifier.align(Alignment.End)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text("ثبت پرداخت")
+                    if (phone != null) {
+                        Box {
+                            TextButton(onClick = { messageMenuExpanded = true }) {
+                                Text("پیام به طرف حساب")
+                            }
+                            DropdownMenu(
+                                expanded = messageMenuExpanded,
+                                onDismissRequest = { messageMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("پیامک") },
+                                    onClick = {
+                                        messageMenuExpanded = false
+                                        sendMessage(context, phone, buildMessage(reminder, remaining.toLong()), false)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("واتساپ") },
+                                    onClick = {
+                                        messageMenuExpanded = false
+                                        sendMessage(context, phone, buildMessage(reminder, remaining.toLong()), true)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            amountText.value = ""
+                            showDialog.value = true
+                        }
+                    ) {
+                        Text("ثبت پرداخت")
+                    }
                 }
             }
         }
@@ -230,6 +340,43 @@ private fun FinancialItemCard(
                 }) { Text("انصراف") }
             }
         )
+    }
+}
+
+/** A short, polite default text — the person can still edit it in the SMS/WhatsApp app. */
+private fun buildMessage(reminder: Reminder, remaining: Long): String {
+    val name = reminder.counterparty?.takeIf { it.isNotBlank() }
+    val greeting = if (name == null) "سلام،" else "سلام $name عزیز،"
+    val amountText = "${remaining.grouped()} تومان"
+    val date = JalaliCalendar.formatDate(reminder.triggerAtMillis)
+    return when (reminder.financialType) {
+        FinancialType.CREDIT ->
+            "$greeting یادآوری دوستانه: مبلغ $amountText بابت «${reminder.title}» تاریخ $date سررسید می‌شه."
+        FinancialType.DEBT ->
+            "$greeting بابت «${reminder.title}» مبلغ $amountText رو تاریخ $date پرداخت می‌کنم."
+        else ->
+            "$greeting یادآوری «${reminder.title}» به مبلغ $amountText، تاریخ $date."
+    }
+}
+
+/** Opens the SMS app, or WhatsApp, with the text ready — no permission needed since the person presses send. */
+private fun sendMessage(context: Context, phone: String, text: String, whatsapp: Boolean) {
+    val digits = phone.filter { it.isDigit() || it == '+' }
+    val intent = if (whatsapp) {
+        val noPlus = digits.removePrefix("+")
+        val international = when {
+            noPlus.startsWith("00") -> noPlus.removePrefix("00")
+            noPlus.startsWith("0") -> "98" + noPlus.removePrefix("0")
+            else -> noPlus
+        }
+        Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$international?text=${Uri.encode(text)}"))
+    } else {
+        Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$digits")).putExtra("sms_body", text)
+    }
+    try {
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "برنامه‌ی مناسبی برای ارسال پیام پیدا نشد", Toast.LENGTH_SHORT).show()
     }
 }
 

@@ -29,6 +29,7 @@ object OcrHelper {
                 recognizer.process(image)
                     .addOnSuccessListener { result -> continuation.resume(result.text) }
                     .addOnFailureListener { e -> continuation.resumeWithException(e) }
+                    .addOnCompleteListener { recognizer.close() }
             } catch (e: Exception) {
                 continuation.resumeWithException(e)
             }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -9,44 +10,74 @@
     android:background="@drawable/widget_background"
     android:padding="16dp">
 
-    <TextView
-        android:id="@+id/widget_title"
+    <!-- Header -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="right"
-        android:text="کارهای امروز"
-        android:textColor="#FFFFFF"
-        android:textSize="17sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layoutDirection="rtl">
 
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="right|center_vertical"
+            android:text="یادآور من"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_add"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="+"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="normal"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- Today count -->
     <TextView
         android:id="@+id/widget_today_count"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
         android:gravity="right"
-        android:text="۳ کار"
+        android:text="امروز · ۳ کار"
         android:textColor="#AEBEFF"
-        android:textSize="11sp" />
+        android:textSize="11sp"
+        android:maxLines="1" />
 
+    <!-- Tasks -->
     <LinearLayout
         android:id="@+id/widget_tasks_container"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="8dp"
         android:orientation="vertical"
         android:gravity="right"
         android:layoutDirection="rtl" />
 
+    <!-- Overdue -->
     <TextView
         android:id="@+id/widget_overdue_count"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
         android:gravity="right"
-        android:text="عقب‌افتاده: ۲"
+        android:text="⚠ ۲ کار عقب‌افتاده"
         android:textColor="#FFCC80"
-        android:textSize="10sp" />
+        android:textSize="10sp"
+        android:maxLines="1" />
 
 </LinearLayout>
