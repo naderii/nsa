@@ -1,6 +1,13 @@
 package ir.naderinia.nsa.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,10 +33,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ir.naderinia.nsa.data.CheckStatus
 import ir.naderinia.nsa.data.FinancialType
@@ -37,7 +48,10 @@ import ir.naderinia.nsa.data.PaymentLog
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.ui.DashboardStats
 import ir.naderinia.nsa.ui.FinancialSummary
+import ir.naderinia.nsa.ui.theme.LocalClassicStyle
+import ir.naderinia.nsa.util.JalaliCalendar
 import ir.naderinia.nsa.util.ThemePrefs
+import kotlinx.coroutines.launch
 
 private enum class HomeTab(val title: String) {
     REMINDERS("یادآوری‌های من"),
@@ -61,6 +75,7 @@ fun HomeScreen(
     onReportClick: () -> Unit,
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
+    onClassicStyleChange: (Boolean) -> Unit,
     onScanClick: () -> Unit,
     onSecurityClick: () -> Unit,
     onSoundClick: () -> Unit,
@@ -72,7 +87,21 @@ fun HomeScreen(
     onOpenActive: () -> Unit,
     onOpenCategory: (String) -> Unit
 ) {
-    var selectedTab by rememberSaveable { mutableStateOf(HomeTab.REMINDERS) }
+    val classic = LocalClassicStyle.current
+    val tabs = HomeTab.values()
+    // The pager is the single source of truth for the current tab: swiping the content and
+    // tapping the bottom bar both end up here, and the page survives rotation/process death.
+    val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val selectedTab = tabs[pagerState.currentPage.coerceIn(0, tabs.size - 1)]
+    fun goToTab(tab: HomeTab) {
+        scope.launch { pagerState.animateScrollToPage(tab.ordinal) }
+    }
+    val overdueBadge = remember(reminders) {
+        val now = System.currentTimeMillis()
+        reminders.count { !it.isDone && it.triggerAtMillis < now }
+    }
     var menuExpanded by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var financialFilter by rememberSaveable { mutableStateOf<FinancialType?>(null) }
@@ -80,12 +109,36 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(selectedTab.title) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
+                title = {
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
+                        label = "homeTitle"
+                    ) { tab ->
+                        if (classic) {
+                            Text(tab.title)
+                        } else {
+                            Text(
+                                tab.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                colors = if (classic) {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 actions = {
                     IconButton(onClick = onSearchClick) {
                         Icon(
@@ -207,13 +260,28 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.REMINDERS,
                     onClick = {
-                        selectedTab = HomeTab.REMINDERS
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        goToTab(HomeTab.REMINDERS)
                     },
                     icon = {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null
-                        )
+                        BadgedBox(
+                            badge = {
+                                if (!classic && overdueBadge > 0) {
+                                    Badge {
+                                        Text(
+                                            JalaliCalendar.toPersianDigits(
+                                                overdueBadge.coerceAtMost(99).toString()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = null
+                            )
+                        }
                     },
                     label = { Text("یادآوری‌ها") }
                 )
@@ -221,7 +289,8 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.FINANCIAL,
                     onClick = {
-                        selectedTab = HomeTab.FINANCIAL
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        goToTab(HomeTab.FINANCIAL)
                     },
                     icon = {
                         Icon(
@@ -235,7 +304,8 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.DASHBOARD,
                     onClick = {
-                        selectedTab = HomeTab.DASHBOARD
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        goToTab(HomeTab.DASHBOARD)
                     },
                     icon = {
                         Icon(
@@ -250,7 +320,14 @@ fun HomeScreen(
 
         floatingActionButton = {
             ExtendedFloatingActionButton(
+                containerColor = if (classic) FloatingActionButtonDefaults.containerColor
+                else MaterialTheme.colorScheme.primary,
+                contentColor = if (classic) contentColorFor(FloatingActionButtonDefaults.containerColor)
+                else MaterialTheme.colorScheme.onPrimary,
+                shape = if (classic) FloatingActionButtonDefaults.extendedFabShape
+                else MaterialTheme.shapes.large,
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     if (selectedTab == HomeTab.FINANCIAL) {
                         onAddClick("مالی", financialFilter)
                     } else {
@@ -275,35 +352,42 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            when (selectedTab) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1,
+                key = { it }
+            ) { page ->
+                when (tabs[page]) {
 
-                HomeTab.REMINDERS -> RemindersOverview(
-                    reminders = reminders,
-                    onOpenToday = onOpenToday,
-                    onOpenOverdue = onOpenOverdue,
-                    onOpenActive = onOpenActive,
-                    onOpenCategory = onOpenCategory
-                )
+                    HomeTab.REMINDERS -> RemindersOverview(
+                        reminders = reminders,
+                        onOpenToday = onOpenToday,
+                        onOpenOverdue = onOpenOverdue,
+                        onOpenActive = onOpenActive,
+                        onOpenCategory = onOpenCategory
+                    )
 
-                HomeTab.FINANCIAL -> FinancialScreen(
-                    reminders = financialReminders,
-                    summary = financialSummary,
-                    selectedFilter = financialFilter,
-                    onFilterChange = { financialFilter = it },
-                    paymentLogs = paymentLogs,
-                    onCheckStatusChange = onCheckStatusChange,
-                    onReportClick = onReportClick,
-                    onRecordPayment = onRecordPayment
-                )
+                    HomeTab.FINANCIAL -> FinancialScreen(
+                        reminders = financialReminders,
+                        summary = financialSummary,
+                        selectedFilter = financialFilter,
+                        onFilterChange = { financialFilter = it },
+                        paymentLogs = paymentLogs,
+                        onCheckStatusChange = onCheckStatusChange,
+                        onReportClick = onReportClick,
+                        onRecordPayment = onRecordPayment
+                    )
 
-                HomeTab.DASHBOARD -> DashboardScreen(
-                    stats = dashboardStats,
-                    financialSummary = financialSummary,
-                    onOpenToday = onOpenToday,
-                    onOpenOverdue = onOpenOverdue,
-                    onOpenActive = onOpenActive,
-                    onOpenFinancial = { selectedTab = HomeTab.FINANCIAL }
-                )
+                    HomeTab.DASHBOARD -> DashboardScreen(
+                        stats = dashboardStats,
+                        financialSummary = financialSummary,
+                        onOpenToday = onOpenToday,
+                        onOpenOverdue = onOpenOverdue,
+                        onOpenActive = onOpenActive,
+                        onOpenFinancial = { goToTab(HomeTab.FINANCIAL) }
+                    )
+                }
             }
         }
     }
@@ -314,6 +398,12 @@ fun HomeScreen(
             title = { Text("ظاهر برنامه") },
             text = {
                 Column {
+                    Text(
+                        "رنگ‌بندی",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
                     listOf(
                         ThemePrefs.SYSTEM to "مطابق تنظیم گوشی",
                         ThemePrefs.LIGHT to "روشن",
@@ -333,6 +423,39 @@ fun HomeScreen(
                                 selected = themeMode == mode,
                                 onClick = {
                                     onThemeModeChange(mode)
+                                    showThemeDialog = false
+                                }
+                            )
+                            Text(label)
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Text(
+                        "سبک ظاهر",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    listOf(
+                        false to "مدرن",
+                        true to "کلاسیک (ظاهر نسخه‌های قبلی)"
+                    ).forEach { (isClassic, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onClassicStyleChange(isClassic)
+                                    showThemeDialog = false
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = classic == isClassic,
+                                onClick = {
+                                    onClassicStyleChange(isClassic)
                                     showThemeDialog = false
                                 }
                             )

@@ -19,7 +19,14 @@ import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.core.app.ActivityCompat
 import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.BatteryAlert
@@ -123,9 +130,14 @@ class MainActivity : FragmentActivity() {
                 mutableStateOf(ThemePrefs.getMode(this@MainActivity))
             }
 
+            var classicStyle by remember {
+                mutableStateOf(ThemePrefs.isClassic(this@MainActivity))
+            }
+
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
 
             NsaTheme(
+                classicStyle = classicStyle,
                 darkTheme = when (themeMode) {
                     ThemePrefs.LIGHT -> false
                     ThemePrefs.DARK -> true
@@ -708,7 +720,35 @@ class MainActivity : FragmentActivity() {
                     NavHost(
                         navController = navController,
                         startDestination = startDestination,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        // Screens glide in from the "forward" side (Start/End follow the layout
+                        // direction, so this is right-to-left in a Persian UI) with a soft fade.
+                        enterTransition = {
+                            slideIntoContainer(
+                                AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(320)
+                            ) + fadeIn(tween(320))
+                        },
+                        exitTransition = {
+                            slideOutOfContainer(
+                                AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(320),
+                                targetOffset = { it / 4 }
+                            ) + fadeOut(tween(220))
+                        },
+                        popEnterTransition = {
+                            slideIntoContainer(
+                                AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(320),
+                                initialOffset = { it / 4 }
+                            ) + fadeIn(tween(320))
+                        },
+                        popExitTransition = {
+                            slideOutOfContainer(
+                                AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(320)
+                            ) + fadeOut(tween(220))
+                        }
                     ) {
 
                         composable("onboarding") {
@@ -821,6 +861,11 @@ class MainActivity : FragmentActivity() {
                                 onThemeModeChange = { mode ->
                                     themeMode = mode
                                     ThemePrefs.setMode(this@MainActivity, mode)
+                                },
+
+                                onClassicStyleChange = { classic ->
+                                    classicStyle = classic
+                                    ThemePrefs.setClassic(this@MainActivity, classic)
                                 },
 
                                 onScanClick = {

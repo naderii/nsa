@@ -9,7 +9,14 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalContext
+
+/** true when the user picked the classic look (plain bars/cards as in 0.22.x). */
+val LocalClassicStyle = staticCompositionLocalOf { false }
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -73,6 +80,7 @@ private val DarkColors = darkColorScheme(
 fun NsaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
+    classicStyle: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -84,10 +92,18 @@ fun NsaTheme(
         else -> LightColors
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = NsaShapes,
-        content = content
-    )
+    // The whole app is Persian, so the layout is always right-to-left — even on a phone whose
+    // system language is English. Without this, tabs, back arrows, swipe directions and list
+    // alignment would flip depending on the phone's locale.
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalClassicStyle provides classicStyle
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = NsaShapes,
+            content = content
+        )
+    }
 }

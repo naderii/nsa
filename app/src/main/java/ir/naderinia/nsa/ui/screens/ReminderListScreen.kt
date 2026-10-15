@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
@@ -35,6 +37,9 @@ import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.parseChecklist
 import ir.naderinia.nsa.data.serializeChecklist
 import ir.naderinia.nsa.data.persianLabel
+import ir.naderinia.nsa.ui.components.pressScale
+import ir.naderinia.nsa.ui.components.rememberPressSource
+import ir.naderinia.nsa.ui.theme.LocalClassicStyle
 import ir.naderinia.nsa.ui.theme.onSuccessContainerColor
 import ir.naderinia.nsa.ui.theme.successContainerColor
 import ir.naderinia.nsa.util.CarPrefs
@@ -162,7 +167,12 @@ fun ReminderListContent(
                     )
                 }
                 items(items, key = { it.id }) { reminder ->
-                    Box(modifier = Modifier.animateItem()) {
+                    SwipeableReminder(
+                        reminder = reminder,
+                        onToggleDone = onToggleDone,
+                        onDelete = onDelete,
+                        modifier = Modifier.animateItem()
+                    ) {
                         ReminderCard(
                             reminder = reminder,
                             urgency = urgencyFor(reminder, group, currentKm),
@@ -178,6 +188,93 @@ fun ReminderListContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * Swipe a card toward one side to mark it done (or bring it back), toward the other side to
+ * delete it (the existing «واگرد» snackbar still applies). Coloured hints and a light haptic tick
+ * make the gesture discoverable and satisfying. Directions follow the layout direction.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeableReminder(
+    reminder: Reminder,
+    onToggleDone: (Reminder) -> Unit,
+    onDelete: (Reminder) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val currentReminder by rememberUpdatedState(reminder)
+    val currentToggle by rememberUpdatedState(onToggleDone)
+    val currentDelete by rememberUpdatedState(onDelete)
+
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    currentToggle(currentReminder)
+                    false // the card stays and snaps back; it simply moves to its new group
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    currentDelete(currentReminder)
+                    true
+                }
+                SwipeToDismissBoxValue.Settled -> false
+            }
+        }
+    )
+
+    SwipeToDismissBox(
+        state = state,
+        modifier = modifier,
+        backgroundContent = {
+            val direction = state.dismissDirection
+            val doneColor = successContainerColor()
+            val onDoneColor = onSuccessContainerColor()
+            val errorColor = MaterialTheme.colorScheme.errorContainer
+            val onErrorColor = MaterialTheme.colorScheme.onErrorContainer
+
+            val bg = when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> doneColor
+                SwipeToDismissBoxValue.EndToStart -> errorColor
+                else -> Color.Transparent
+            }
+            val fg = if (direction == SwipeToDismissBoxValue.StartToEnd) onDoneColor else onErrorColor
+            val align = if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                Alignment.CenterStart
+            } else {
+                Alignment.CenterEnd
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(if (LocalClassicStyle.current) MaterialTheme.shapes.medium else MaterialTheme.shapes.large)
+                    .background(bg)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = align
+            ) {
+                when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> Icon(
+                        if (reminder.isDone) Icons.Default.Replay else Icons.Default.Check,
+                        contentDescription = if (reminder.isDone) "برگرداندن" else "انجام شد",
+                        tint = fg
+                    )
+                    SwipeToDismissBoxValue.EndToStart -> Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "حذف",
+                        tint = fg
+                    )
+                    else -> Unit
+                }
+            }
+        }
+    ) {
+        content()
     }
 }
 
@@ -219,9 +316,17 @@ private fun ReminderCard(
         Urgency.NEUTRAL -> Color.Unspecified
     }
 
+    val pressSource = rememberPressSource()
+    val classic = LocalClassicStyle.current
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        onClick = { onEdit(reminder) },
+        interactionSource = pressSource,
+        shape = if (classic) MaterialTheme.shapes.medium else MaterialTheme.shapes.large,
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(pressSource, pressedScale = 0.985f),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (classic) 2.dp else 1.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Column {
@@ -322,8 +427,10 @@ private fun ReminderCard(
                         onToggleDone(reminder)
                     }
                 )
-                IconButton(onClick = { onEdit(reminder) }) {
-                    Icon(Icons.Default.Edit, contentDescription = "ویرایش")
+                if (classic) {
+                    IconButton(onClick = { onEdit(reminder) }) {
+                        Icon(Icons.Default.Edit, contentDescription = "ویرایش")
+                    }
                 }
                 IconButton(onClick = { onDelete(reminder) }) {
                     Icon(Icons.Default.Delete, contentDescription = "حذف")
