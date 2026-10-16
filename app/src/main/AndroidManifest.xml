@@ -52,6 +52,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".notification.FinanceDigestReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".notification.BootRescheduleReceiver"
             android:exported="true">
             <intent-filter>

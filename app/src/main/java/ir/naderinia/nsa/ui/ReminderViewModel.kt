@@ -16,9 +16,15 @@ import ir.naderinia.nsa.data.parseChecklist
 import ir.naderinia.nsa.data.serializeChecklist
 import ir.naderinia.nsa.notification.BillCycle
 import ir.naderinia.nsa.notification.NotificationScheduler
+import ir.naderinia.nsa.util.FinanceAnalysis
+import ir.naderinia.nsa.util.FinanceInsights
 import ir.naderinia.nsa.util.JalaliCalendar
 import ir.naderinia.nsa.widget.NsaWidgetProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -189,6 +195,32 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 FinancialSummary(0, 0)
             )
 
+    /** Re-evaluates "overdue / today / tomorrow" as time passes, even if the database does not change. */
+    private val minuteTicker = flow {
+        while (true) {
+            emit(Unit)
+            delay(60_000)
+        }
+    }
+
+    /**
+     * Everything the finance screens and the dashboard need to "think": this month per type,
+     * overdue, next 7 days, loans, 6-month forecast and smart insights (see FinanceInsights).
+     */
+    val financeAnalysis: StateFlow<FinanceAnalysis> = combine(
+        dao.observeFinancial(),
+        paymentLogDao.observeAll(),
+        minuteTicker
+    ) { financial, logs, _ ->
+        FinanceInsights.analyze(financial, logs, System.currentTimeMillis())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            FinanceAnalysis.EMPTY
+        )
+
     val dashboardStats: StateFlow<DashboardStats> = combine(
         dao.observeAll(),
         paymentLogDao.observeAll(),
@@ -217,6 +249,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
         val upcomingPayments = allReminders.filter {
             it.financialType != null &&
+                it.financialType != FinancialType.CREDIT &&
                 !it.isDone &&
                 it.triggerAtMillis in
                 now..(now + sevenDaysMillis)
@@ -623,7 +656,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
 
             if (!reminder.isDone && reminder.isRecurringBill()) {
-                // Ticking a repeating bill means "this month's is paid": move to the next cycle.
+                // Ticking a repeating bill means "this month's is paid": log what was still unpaid
+                // (otherwise reports, the monthly spend and the forecast never see this payment),
+                // then move to the next cycle.
+                val unpaid = (reminder.amount ?: 0L) - reminder.amountPaid
+                if (unpaid > 0) {
+                    paymentLogDao.insert(PaymentLog(reminderId = reminder.id, amount = unpaid))
+                }
                 val rolled = BillCycle.rolled(reminder)
                 dao.update(rolled)
                 NotificationScheduler.schedule(getApplication(), rolled)

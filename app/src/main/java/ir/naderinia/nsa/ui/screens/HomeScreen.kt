@@ -49,6 +49,7 @@ import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.ui.DashboardStats
 import ir.naderinia.nsa.ui.FinancialSummary
 import ir.naderinia.nsa.ui.theme.LocalClassicStyle
+import ir.naderinia.nsa.util.FinanceAnalysis
 import ir.naderinia.nsa.util.JalaliCalendar
 import ir.naderinia.nsa.util.ThemePrefs
 import kotlinx.coroutines.launch
@@ -65,6 +66,7 @@ fun HomeScreen(
     reminders: List<Reminder>,
     financialReminders: List<Reminder>,
     financialSummary: FinancialSummary,
+    financeAnalysis: FinanceAnalysis,
     paymentLogs: List<PaymentLog>,
     dashboardStats: DashboardStats,
     /** (category, financialType): what the new reminder should be pre-set to, based on the current tab. */
@@ -73,6 +75,7 @@ fun HomeScreen(
     onCheckStatusChange: (Reminder, CheckStatus?) -> Unit,
     onSearchClick: () -> Unit,
     onReportClick: () -> Unit,
+    onForecastClick: () -> Unit,
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
     onClassicStyleChange: (Boolean) -> Unit,
@@ -371,6 +374,8 @@ fun HomeScreen(
                     HomeTab.FINANCIAL -> FinancialScreen(
                         reminders = financialReminders,
                         summary = financialSummary,
+                        analysis = financeAnalysis,
+                        onForecastClick = onForecastClick,
                         selectedFilter = financialFilter,
                         onFilterChange = { financialFilter = it },
                         paymentLogs = paymentLogs,
@@ -382,6 +387,7 @@ fun HomeScreen(
                     HomeTab.DASHBOARD -> DashboardScreen(
                         stats = dashboardStats,
                         financialSummary = financialSummary,
+                        financeAnalysis = financeAnalysis,
                         onOpenToday = onOpenToday,
                         onOpenOverdue = onOpenOverdue,
                         onOpenActive = onOpenActive,

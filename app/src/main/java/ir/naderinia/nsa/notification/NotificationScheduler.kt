@@ -48,7 +48,7 @@ object NotificationScheduler {
      * calling the exact API then throws SecurityException and would crash the app while saving.
      * Fall back to an inexact (but still Doze-safe) alarm instead of crashing.
      */
-    private fun setAlarm(context: Context, alarmManager: AlarmManager, atMillis: Long, pendingIntent: PendingIntent) {
+    internal fun setAlarm(context: Context, alarmManager: AlarmManager, atMillis: Long, pendingIntent: PendingIntent) {
         try {
             if (PermissionStatus.canScheduleExactAlarms(context)) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
@@ -238,6 +238,7 @@ object NotificationScheduler {
                 }
             }
         rescheduleSnoozes(context)
+        FinanceDigest.reschedule(context)
     }
 
     private fun parseDaysOfWeek(csv: String?): Set<Int> =

@@ -73,6 +73,7 @@ import ir.naderinia.nsa.ui.screens.HomeScreen
 import ir.naderinia.nsa.ui.screens.LockScreen
 import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
 import ir.naderinia.nsa.ui.screens.PermissionUiState
+import ir.naderinia.nsa.ui.screens.FinanceForecastScreen
 import ir.naderinia.nsa.ui.screens.FinanceReportScreen
 import ir.naderinia.nsa.notification.NotificationScheduler
 import ir.naderinia.nsa.ui.screens.ScanReceiptScreen
@@ -547,6 +548,8 @@ class MainActivity : FragmentActivity() {
 
                 val financialSummary by
                     viewModel.financialSummary.collectAsState()
+                val financeAnalysis by
+                    viewModel.financeAnalysis.collectAsState()
 
                 val paymentLogs by
                     viewModel.paymentLogs.collectAsState()
@@ -824,6 +827,7 @@ class MainActivity : FragmentActivity() {
                                 reminders = reminders,
                                 financialReminders = financialReminders,
                                 financialSummary = financialSummary,
+                                financeAnalysis = financeAnalysis,
                                 paymentLogs = paymentLogs,
                                 dashboardStats = dashboardStats,
 
@@ -854,6 +858,10 @@ class MainActivity : FragmentActivity() {
 
                                 onReportClick = {
                                     navController.navigate("report")
+                                },
+
+                                onForecastClick = {
+                                    navController.navigate("forecast")
                                 },
 
                                 themeMode = themeMode,
@@ -1027,6 +1035,16 @@ class MainActivity : FragmentActivity() {
                             FinanceReportScreen(
                                 financialReminders = financialReminders,
                                 paymentLogs = paymentLogs,
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+
+                        composable("forecast") {
+
+                            FinanceForecastScreen(
+                                analysis = financeAnalysis,
                                 onBack = {
                                     navController.popBackStack()
                                 }

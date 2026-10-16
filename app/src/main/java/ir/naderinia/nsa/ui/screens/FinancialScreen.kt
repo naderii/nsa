@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +35,11 @@ import ir.naderinia.nsa.data.PaymentLog
 import ir.naderinia.nsa.data.persianLabel
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.ui.FinancialSummary
+import ir.naderinia.nsa.ui.components.SectionHeader
+import ir.naderinia.nsa.util.FinanceAnalysis
+import ir.naderinia.nsa.util.FinanceInsights
 import ir.naderinia.nsa.util.JalaliCalendar
+import ir.naderinia.nsa.util.LoanGroup
 import ir.naderinia.nsa.util.grouped
 
 /**
@@ -40,26 +47,101 @@ import ir.naderinia.nsa.util.grouped
  * HomeScreen, which owns the single shared Scaffold (with the bottom nav
  * bar). Nesting another Scaffold here would double up app bars/padding.
  */
+private enum class StatusFilter(val label: String) {
+    ACTIVE("فعال"),
+    OVERDUE("عقب‌افتاده"),
+    THIS_MONTH("این ماه"),
+    SETTLED("تسویه‌شده"),
+    ALL("همه")
+}
+
 @Composable
 fun FinancialScreen(
     reminders: List<Reminder>,
     summary: FinancialSummary,
+    analysis: FinanceAnalysis,
     selectedFilter: FinancialType?, // null = all
     onFilterChange: (FinancialType?) -> Unit,
     paymentLogs: List<PaymentLog>,
     onCheckStatusChange: (Reminder, CheckStatus?) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit,
-    onReportClick: () -> Unit
+    onReportClick: () -> Unit,
+    onForecastClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    var statusOrdinal by rememberSaveable { mutableStateOf(StatusFilter.ACTIVE.ordinal) }
+    val status = StatusFilter.entries[statusOrdinal.coerceIn(0, StatusFilter.entries.size - 1)]
 
-    val filtered = if (selectedFilter == null) reminders else reminders.filter { it.financialType == selectedFilter }
+    val now = System.currentTimeMillis()
+    val plan = analysis.month
+    val monthStart = JalaliCalendar.jalaliToMillis(plan.year, plan.month, 1, 0, 0)
+    val nextTotal = plan.year * 12 + (plan.month - 1) + 1
+    val monthEnd = JalaliCalendar.jalaliToMillis(nextTotal / 12, nextTotal % 12 + 1, 1, 0, 0)
+
+    val filtered = remember(reminders, selectedFilter, status, analysis) {
+        val byType = if (selectedFilter == null) reminders else reminders.filter { it.financialType == selectedFilter }
+        val byStatus = when (status) {
+            StatusFilter.ACTIVE -> byType.filter { !it.isDone }
+            StatusFilter.OVERDUE -> byType.filter { !it.isDone && it.triggerAtMillis < now }
+            StatusFilter.THIS_MONTH -> byType.filter { !it.isDone && it.triggerAtMillis in monthStart until monthEnd }
+            StatusFilter.SETTLED -> byType.filter { it.isDone }
+            StatusFilter.ALL -> byType
+        }
+        // open items first (most urgent on top), settled ones after, newest first
+        byStatus.sortedWith(
+            compareBy<Reminder> { it.isDone }
+                .thenBy { if (it.isDone) -it.triggerAtMillis else it.triggerAtMillis }
+        )
+    }
+
+    val showLoans = (selectedFilter == null || selectedFilter == FinancialType.INSTALLMENT) &&
+        status != StatusFilter.SETTLED
+    val loanGroups = analysis.loans.filter { it.totalCount > 1 && it.remainingCount > 0 }
+    var showAllInsights by rememberSaveable { mutableStateOf(false) }
+    val insights = if (showAllInsights) analysis.insights else analysis.insights.take(3)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            MonthFinanceCard(
+                plan = plan,
+                actionLabel = "برنامه‌ی ماه‌های آینده و پیش‌بینی",
+                onAction = onForecastClick
+            )
+        }
+
+        if (insights.isNotEmpty()) {
+            item {
+                InsightsList(
+                    insights = insights,
+                    onNudge = { id ->
+                        reminders.firstOrNull { it.id == id }?.let { r ->
+                            r.counterpartyPhone?.let { phone ->
+                                val rest = ((r.amount ?: 0L) - r.amountPaid).coerceAtLeast(0L)
+                                sendMessage(context, phone, buildMessage(r, rest), false)
+                            }
+                        }
+                    }
+                )
+            }
+            if (analysis.insights.size > 3) {
+                item {
+                    TextButton(onClick = { showAllInsights = !showAllInsights }) {
+                        Text(if (showAllInsights) "نمایش کمتر" else "نمایش همه‌ی هشدارها (${analysis.insights.size})")
+                    }
+                }
+            }
+        }
+
         item { SummaryCard(summary) }
+
+        if (showLoans && loanGroups.isNotEmpty()) {
+            item { SectionHeader("وام‌ها و اقساط") }
+            items(loanGroups, key = { "loan_${it.key}" }) { LoanGroupCard(it) }
+        }
 
         item {
             OutlinedButton(
@@ -69,6 +151,8 @@ fun FinancialScreen(
                 Text("گزارش ماهانه و خروجی PDF / اکسل")
             }
         }
+
+        item { DigestSettingsCard() }
 
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -89,6 +173,18 @@ fun FinancialScreen(
             }
         }
 
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(StatusFilter.entries.toList()) { f ->
+                    FilterChip(
+                        selected = status == f,
+                        onClick = { statusOrdinal = f.ordinal },
+                        label = { Text(f.label) }
+                    )
+                }
+            }
+        }
+
         if (filtered.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -104,6 +200,7 @@ fun FinancialScreen(
                 FinancialItemCard(
                     reminder = reminder,
                     logs = paymentLogs,
+                    loan = analysis.loans.firstOrNull { reminder.id in it.reminderIds && it.totalCount > 1 },
                     onRecordPayment = onRecordPayment,
                     onCheckStatusChange = onCheckStatusChange
                 )
@@ -162,6 +259,7 @@ private fun SummaryStat(label: String, value: Long, color: Color, modifier: Modi
 private fun FinancialItemCard(
     reminder: Reminder,
     logs: List<PaymentLog>,
+    loan: LoanGroup?,
     onRecordPayment: (Reminder, Long) -> Unit,
     onCheckStatusChange: (Reminder, CheckStatus?) -> Unit
 ) {
@@ -317,12 +415,32 @@ private fun FinancialItemCard(
             },
             title = { Text("ثبت پرداخت") },
             text = {
-                OutlinedTextField(
-                    value = amountText.value,
-                    onValueChange = { value -> amountText.value = value.filter { c -> c.isDigit() } },
-                    label = { Text("مبلغ (تومان)") },
-                    singleLine = true
-                )
+                Column {
+                    OutlinedTextField(
+                        value = amountText.value,
+                        onValueChange = { value -> amountText.value = value.filter { c -> c.isDigit() } },
+                        label = { Text("مبلغ (تومان)") },
+                        singleLine = true
+                    )
+                    val suggestions = remember(reminder, logs, loan) {
+                        FinanceInsights.paymentSuggestions(reminder, logs, loan)
+                    }
+                    if (suggestions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            suggestions.forEach { (label, amount) ->
+                                FilterChip(
+                                    selected = amountText.value == amount.toString(),
+                                    onClick = { amountText.value = amount.toString() },
+                                    label = { Text("$label: ${amount.grouped()}") }
+                                )
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -344,7 +462,7 @@ private fun FinancialItemCard(
 }
 
 /** A short, polite default text — the person can still edit it in the SMS/WhatsApp app. */
-private fun buildMessage(reminder: Reminder, remaining: Long): String {
+internal fun buildMessage(reminder: Reminder, remaining: Long): String {
     val name = reminder.counterparty?.takeIf { it.isNotBlank() }
     val greeting = if (name == null) "سلام،" else "سلام $name عزیز،"
     val amountText = "${remaining.grouped()} تومان"
@@ -360,7 +478,7 @@ private fun buildMessage(reminder: Reminder, remaining: Long): String {
 }
 
 /** Opens the SMS app, or WhatsApp, with the text ready — no permission needed since the person presses send. */
-private fun sendMessage(context: Context, phone: String, text: String, whatsapp: Boolean) {
+internal fun sendMessage(context: Context, phone: String, text: String, whatsapp: Boolean) {
     val digits = phone.filter { it.isDigit() || it == '+' }
     val intent = if (whatsapp) {
         val noPlus = digits.removePrefix("+")

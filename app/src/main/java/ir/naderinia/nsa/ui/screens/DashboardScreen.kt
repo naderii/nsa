@@ -23,6 +23,7 @@ import ir.naderinia.nsa.ui.MonthSpend
 import ir.naderinia.nsa.ui.components.EmptyHint
 import ir.naderinia.nsa.ui.components.SectionHeader
 import ir.naderinia.nsa.util.CarPrefs
+import ir.naderinia.nsa.util.FinanceAnalysis
 import ir.naderinia.nsa.util.JalaliCalendar
 import ir.naderinia.nsa.util.grouped
 import java.util.Calendar
@@ -42,6 +43,7 @@ private const val PREVIEW_LIMIT = 5
 fun DashboardScreen(
     stats: DashboardStats,
     financialSummary: FinancialSummary,
+    financeAnalysis: FinanceAnalysis,
     onOpenToday: () -> Unit,
     onOpenOverdue: () -> Unit,
     onOpenActive: () -> Unit,
@@ -102,11 +104,17 @@ fun DashboardScreen(
             item { BirthdayCard(birthday) }
         }
 
+        val plan = financeAnalysis.month
         if (financialSummary.totalDebtRemaining != 0L ||
             financialSummary.totalCreditRemaining != 0L ||
-            stats.upcomingPayments.isNotEmpty()
+            stats.upcomingPayments.isNotEmpty() ||
+            plan.monthTotal > 0 || plan.carryOverdue > 0
         ) {
-            item { FinanceCard(stats, financialSummary, onOpenFinancial) }
+            item { MonthFinanceCard(plan = plan, onClick = onOpenFinancial) }
+            if (financeAnalysis.insights.isNotEmpty()) {
+                item { InsightsList(financeAnalysis.insights.take(3)) }
+            }
+            item { FinanceCard(financialSummary, onOpenFinancial) }
         }
 
         item { SpendChartCard(stats) }
@@ -388,7 +396,6 @@ private fun BirthdayCard(reminder: Reminder) {
 
 @Composable
 private fun FinanceCard(
-    stats: DashboardStats,
     summary: FinancialSummary,
     onClick: () -> Unit
 ) {
@@ -396,21 +403,12 @@ private fun FinanceCard(
 
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("وضعیت مالی", style = MaterialTheme.typography.titleMedium)
+            Text("بدهی و طلب کل", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "مانده‌ی خالص: ${if (summary.net >= 0) "+" else ""}${summary.net.grouped()} تومان",
                 style = MaterialTheme.typography.titleLarge,
                 color = netColor
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                buildString {
-                    append("${stats.upcomingPayments.size} پرداخت تا ۷ روز آینده")
-                    if (stats.weekChecks > 0) append(" (${stats.weekChecks} چک)")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
