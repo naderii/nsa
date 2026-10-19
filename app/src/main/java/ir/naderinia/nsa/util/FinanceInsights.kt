@@ -630,6 +630,18 @@ object FinanceInsights {
         val crunch = analysis.insights.firstOrNull { it.title.startsWith("هفته‌ی سنگین") }
         if (crunch != null) lines += crunch.title
 
+        // Something falls due in the next 3 days on a day the banks are closed (holiday / Friday / Thursday):
+        // say so now, while there is still a bank day left to deal with it.
+        val onClosedDay = analysis.forecast.flatMap { it.items }
+            .filter { it.at >= startOfDay(now) && it.at <= now + 3 * DAY && !IranHolidays.isBankDay(it.at) }
+            .distinctBy { it.reminderId }
+            .sortedBy { it.at }
+        if (onClosedDay.isNotEmpty()) {
+            val names = onClosedDay.take(2).joinToString("، ") { q(it.title) + " (" + dayMonthLabel(it.at) + ")" }
+            val more = if (onClosedDay.size > 2) " و ${fa(onClosedDay.size - 2)} مورد دیگر" else ""
+            lines += "⚠ بانک بسته‌ست و سررسید داره: $names$more — قبلش اقدام کن"
+        }
+
         val firstOfMonth = JalaliCalendar.millisToJalali(now).day == 1
         if (firstOfMonth && analysis.month.mustPayNow > 0) {
             val m = analysis.month

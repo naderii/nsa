@@ -63,12 +63,16 @@ import androidx.navigation.compose.rememberNavController
 import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.RepeatInterval
 import ir.naderinia.nsa.data.sectionKey
+import ir.naderinia.nsa.notification.EscalationManager
 import ir.naderinia.nsa.notification.NotificationHelper
+import ir.naderinia.nsa.notification.ReminderNotifier
+import ir.naderinia.nsa.ui.screens.AssistantScreen
 import ir.naderinia.nsa.ui.ReminderUiEvent
 import ir.naderinia.nsa.ui.ReminderViewModel
 import ir.naderinia.nsa.ui.screens.AboutScreen
 import ir.naderinia.nsa.ui.screens.AddReminderScreen
 import ir.naderinia.nsa.ui.screens.CategoryDetailScreen
+import ir.naderinia.nsa.ui.screens.HelpScreen
 import ir.naderinia.nsa.ui.screens.HomeScreen
 import ir.naderinia.nsa.ui.screens.LockScreen
 import ir.naderinia.nsa.ui.screens.PermissionOnboardingScreen
@@ -115,8 +119,24 @@ class MainActivity : FragmentActivity() {
         private const val LOCK_TIMEOUT_MILLIS = 30_000L
     }
 
+    /** Opening a reminder's notification means it was seen: a «حیاتی» one stops repeating its alert. */
+    private fun acknowledgeFromIntent(i: Intent?) {
+        val id = i?.getLongExtra(ReminderNotifier.EXTRA_ACK_REMINDER_ID, -1L) ?: -1L
+        if (id != -1L) {
+            EscalationManager.acknowledge(applicationContext, id)
+            i?.removeExtra(ReminderNotifier.EXTRA_ACK_REMINDER_ID)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acknowledgeFromIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        acknowledgeFromIntent(intent)
 
         // AlarmManager forgets alarms after a force-stop or a restore on another phone — and
         // nothing else would re-arm them. Opening the app does (2 min grace: an alarm that is
@@ -570,6 +590,11 @@ class MainActivity : FragmentActivity() {
                     mutableStateOf<ReminderDetailFilter?>(null)
                 }
 
+                // Which section of the guide to open first (null = from the top).
+                var helpSectionId by remember {
+                    mutableStateOf<String?>(null)
+                }
+
                 // What a *new* reminder should be pre-set to, depending on which
                 // section the "یادآوری جدید" button was tapped in.
                 var addPresetCategory by remember {
@@ -802,6 +827,16 @@ class MainActivity : FragmentActivity() {
                             )
                         }
 
+                        composable("help") {
+
+                            HelpScreen(
+                                initialSectionId = helpSectionId,
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+
                         composable("about") {
 
                             AboutScreen(
@@ -856,6 +891,10 @@ class MainActivity : FragmentActivity() {
                                     navController.navigate("search")
                                 },
 
+                                onAssistantClick = {
+                                    navController.navigate("assistant")
+                                },
+
                                 onReportClick = {
                                     navController.navigate("report")
                                 },
@@ -898,6 +937,11 @@ class MainActivity : FragmentActivity() {
 
                                 onAboutClick = {
                                     navController.navigate("about")
+                                },
+
+                                onHelpClick = { sectionId ->
+                                    helpSectionId = sectionId
+                                    navController.navigate("help")
                                 },
 
                                 onOpenActive = {
@@ -1096,6 +1140,43 @@ class MainActivity : FragmentActivity() {
                             )
                         }
 
+                        composable("assistant") {
+
+                            AssistantScreen(
+                                reminders = reminders,
+
+                                onCreate = { p ->
+                                    if (p.financialType == FinancialType.INSTALLMENT && p.installmentCount > 1) {
+                                        viewModel.addInstallments(
+                                            p.title, p.note, p.category, p.categoryColor,
+                                            p.triggerAtMillis, p.installmentCount, p.amount,
+                                            p.counterparty, null, null, p.bankName
+                                        )
+                                    } else {
+                                        viewModel.addReminder(
+                                            p.title, p.note, p.category, p.categoryColor,
+                                            p.triggerAtMillis, p.repeatInterval, p.amount,
+                                            p.counterparty, null, p.financialType, null,
+                                            p.mileageTargetKm, null, p.bankName,
+                                            p.repeatDaysOfWeek, p.birthYear, null,
+                                            if (p.critical) 1 else 0
+                                        )
+                                    }
+                                },
+
+                                onOpenReminder = { reminder ->
+                                    editingReminder = reminder
+                                    addPresetCategory = null
+                                    addPresetFinancialType = null
+                                    navController.navigate("add")
+                                },
+
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+
                         composable("security") {
 
                             SecuritySettingsScreen(
@@ -1203,7 +1284,8 @@ class MainActivity : FragmentActivity() {
                                         bankName,
                                         repeatDaysOfWeek,
                                         birthYear,
-                                        checklist ->
+                                        checklist,
+                                        critical ->
 
                                     val current =
                                         editingReminder
@@ -1228,7 +1310,8 @@ class MainActivity : FragmentActivity() {
                                             bankName,
                                             repeatDaysOfWeek,
                                             birthYear,
-                                            checklist
+                                            checklist,
+                                            if (critical) 1 else 0
                                         )
 
                                     } else {
@@ -1250,7 +1333,8 @@ class MainActivity : FragmentActivity() {
                                             bankName,
                                             repeatDaysOfWeek,
                                             birthYear,
-                                            checklist
+                                            checklist,
+                                            if (critical) 1 else 0
                                         )
                                     }
 

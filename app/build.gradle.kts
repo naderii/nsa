@@ -17,8 +17,21 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        versionCode = 32
-        versionName = "0.25.0"
+        versionCode = 35
+        versionName = "0.26.0"
+
+        // ML Kit ships native libraries for every CPU. Real phones are arm64-v8a or (old ones)
+        // armeabi-v7a; x86/x86_64 are only emulators and a few rare tablets. Dropping them is
+        // the single biggest APK-size saving.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // The app is Persian (+ English fallback): do not ship the translated strings of every
+    // AndroidX / Material / ML Kit library in 80+ other languages.
+    androidResources {
+        localeFilters += listOf("fa", "en")
     }
 
     val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -72,7 +85,18 @@ android {
 
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/*.version",
+                "/META-INF/com/android/build/gradle/app-metadata.properties",
+                "DebugProbesKt.bin",
+                "kotlin-tooling-metadata.json"
+            )
+        }
+        // Store native libraries compressed inside the APK. The APK file you share gets clearly
+        // smaller (they are extracted on install, so installed size is a bit larger).
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }
@@ -115,9 +139,9 @@ dependencies {
 
     // ML Kit
     implementation("com.google.mlkit:text-recognition:16.0.1")
-
-    // Coil - فعلاً روی 2.x نگه داشته شده (Coil 3 نیاز به refactor داره)
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    // ML Kit pulls in exifinterface 1.0.0 (old, often missing from local caches/mirrors).
+    // Coil used to bump it to 1.3.7 behind our back; now we pin that version ourselves.
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     // Unit tests
     testImplementation("junit:junit:4.13.2")

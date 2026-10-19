@@ -36,9 +36,4 @@ object PermissionStatus {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         return powerManager.isIgnoringBatteryOptimizations(context.packageName)
     }
-
-    fun allEssentialGranted(context: Context): Boolean =
-        hasNotificationPermission(context) &&
-            canScheduleExactAlarms(context) &&
-            isIgnoringBatteryOptimizations(context)
 }

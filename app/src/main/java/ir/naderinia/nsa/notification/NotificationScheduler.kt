@@ -78,6 +78,8 @@ object NotificationScheduler {
         )
         alarmManager.cancel(pendingIntent)
         cancelSnooze(context, reminderId)
+        // deleted / edited / finished from the app: no more escalation re-alerts either
+        EscalationManager.acknowledge(context, reminderId)
     }
 
     // ───────────── Snooze (one-shot re-alert that doesn't touch the reminder's own schedule) ─────────────
@@ -238,6 +240,7 @@ object NotificationScheduler {
                 }
             }
         rescheduleSnoozes(context)
+        EscalationManager.rescheduleAfterBoot(context)
         FinanceDigest.reschedule(context)
     }
 

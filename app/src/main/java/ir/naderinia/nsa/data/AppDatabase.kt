@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 
-@Database(entities = [Reminder::class, PaymentLog::class, MedicationLog::class], version = 13, exportSchema = false)
+@Database(entities = [Reminder::class, PaymentLog::class, MedicationLog::class], version = 14, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
@@ -99,6 +99,12 @@ abstract class AppDatabase : RoomDatabase() {
                     // Day-of-month anchor for monthly/yearly repeats (see Reminder.repeatAnchorDay).
                     // Nullable: old rows keep working and get anchored the next time they advance.
                     db.execSQL("ALTER TABLE reminders ADD COLUMN repeatAnchorDay INTEGER")
+                }
+            },
+            object : Migration(13, 14) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    // «حیاتی» priority (escalating alerts). Every existing reminder stays normal.
+                    db.execSQL("ALTER TABLE reminders ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
                 }
             }
         )

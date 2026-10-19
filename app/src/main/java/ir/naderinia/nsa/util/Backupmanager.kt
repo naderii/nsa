@@ -218,6 +218,7 @@ object BackupManager {
         put("birthYear", r.birthYear ?: JSONObject.NULL)
         put("checklist", r.checklist ?: JSONObject.NULL)
         put("repeatAnchorDay", r.repeatAnchorDay ?: JSONObject.NULL)
+        put("priority", r.priority)
     }
 
     private fun jsonToReminder(o: JSONObject): Reminder = Reminder(
@@ -248,7 +249,8 @@ object BackupManager {
         }.getOrNull(),
         birthYear = if (o.isNull("birthYear")) null else o.optInt("birthYear"),
         checklist = if (o.isNull("checklist")) null else o.optString("checklist"),
-        repeatAnchorDay = if (o.isNull("repeatAnchorDay")) null else o.optInt("repeatAnchorDay")
+        repeatAnchorDay = if (o.isNull("repeatAnchorDay")) null else o.optInt("repeatAnchorDay"),
+        priority = o.optInt("priority", 0)
     )
 
     private fun logToJson(l: PaymentLog): JSONObject = JSONObject().apply {

@@ -1,5 +1,6 @@
 package ir.naderinia.nsa.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -93,8 +94,17 @@ data class Reminder(
     // Jalali day-of-month a MONTHLY / YEARLY reminder is anchored to. Without it a reminder on
     // the 31st drifts: 31 → 30 (short month) and then stays on the 30th forever.
     // null = not anchored yet (old rows) → the current trigger day is used.
-    val repeatAnchorDay: Int? = null
+    val repeatAnchorDay: Int? = null,
+
+    // 0 = normal, 1 = critical (حیاتی): if the alert is ignored it is repeated a few times with
+    // louder alarm-style sound (see EscalationManager). Stored as an Int so more levels can follow.
+    @ColumnInfo(defaultValue = "0") val priority: Int = 0
 )
+
+const val PRIORITY_NORMAL = 0
+const val PRIORITY_CRITICAL = 1
+
+fun Reminder.isCritical(): Boolean = priority >= PRIORITY_CRITICAL
 
 /** The Jalali day a monthly/yearly reminder must keep landing on; null for other intervals. */
 fun Reminder.effectiveAnchorDay(): Int? =

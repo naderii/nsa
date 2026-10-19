@@ -22,7 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import coil.compose.rememberAsyncImagePainter
+import ir.naderinia.nsa.util.rememberLocalBitmap
 import ir.naderinia.nsa.data.FinancialType
 import ir.naderinia.nsa.data.Reminder
 import ir.naderinia.nsa.data.RepeatInterval
@@ -33,6 +33,8 @@ import ir.naderinia.nsa.ui.theme.CategoryColors
 import ir.naderinia.nsa.util.BabyCareGuide
 import ir.naderinia.nsa.util.CarPrefs
 import ir.naderinia.nsa.util.JalaliCalendar
+import ir.naderinia.nsa.util.IranHolidays
+import ir.naderinia.nsa.data.isCritical
 import ir.naderinia.nsa.util.PregnancyGuide
 import androidx.compose.runtime.mutableStateListOf
 import ir.naderinia.nsa.data.ChecklistItem
@@ -134,7 +136,8 @@ fun AddReminderScreen(
         bankName: String?,
         repeatDaysOfWeek: String?,
         birthYear: Int?,
-        checklist: String?
+        checklist: String?,
+        critical: Boolean
     ) -> Unit,
     onSaveInstallments: (
         title: String,
@@ -154,6 +157,7 @@ fun AddReminderScreen(
     val context = LocalContext.current
 
     var template by remember(editingReminder) { mutableStateOf(inferTemplate(editingReminder, initialCategory)) }
+    var critical by remember(editingReminder) { mutableStateOf(editingReminder?.isCritical() ?: false) }
     var title by remember(editingReminder) { mutableStateOf(editingReminder?.title ?: "") }
     var note by remember(editingReminder) { mutableStateOf(editingReminder?.note ?: "") }
     var category by remember(editingReminder) { mutableStateOf(editingReminder?.category ?: templateForCategory(initialCategory).fixedCategory ?: "عمومی") }
@@ -698,6 +702,35 @@ fun AddReminderScreen(
                 }
             }
 
+            // Cheque / installment / bill due on a holiday, Friday or Thursday: banks are closed.
+            if (template == ReminderTemplate.FINANCIAL) {
+                val closedWarning = remember(triggerMillis) { IranHolidays.dueWarning(triggerMillis) }
+                if (closedWarning != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "⚠ $closedWarning",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val before = remember(triggerMillis) { IranHolidays.previousBankDay(triggerMillis) }
+                                val after = remember(triggerMillis) { IranHolidays.nextBankDay(triggerMillis) }
+                                TextButton(onClick = { triggerMillis = before }) {
+                                    Text("روز کاری قبل (${JalaliCalendar.formatDate(before)})")
+                                }
+                                TextButton(onClick = { triggerMillis = after }) {
+                                    Text("روز کاری بعد (${JalaliCalendar.formatDate(after)})")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (showJalaliDatePicker) {
                 JalaliDateTimePickerDialog(
                     initialMillis = triggerMillis,
@@ -742,6 +775,18 @@ fun AddReminderScreen(
                     selected = selectedWeekDays,
                     onSelectedChange = { selectedWeekDays = it }
                 )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("حیاتی ❗", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "اگه به هشدار جواب ندی، تا ۴ بار با صدای بلندتر تکرار می‌شه",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = critical, onCheckedChange = { critical = it })
             }
 
             Text("چک‌لیست (اختیاری)", style = MaterialTheme.typography.titleSmall)
@@ -808,12 +853,18 @@ fun AddReminderScreen(
                     uri.toString().endsWith(".jpg", ignoreCase = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isImage) {
-                        Image(
-                            painter = rememberAsyncImagePainter(uri),
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            contentScale = ContentScale.Crop
-                        )
+                        val thumbnail by rememberLocalBitmap(uri, 256)
+                        val loaded = thumbnail
+                        if (loaded != null) {
+                            Image(
+                                bitmap = loaded,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.size(64.dp))
+                        }
                     } else {
                         Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, modifier = Modifier.size(48.dp))
                     }
@@ -873,7 +924,8 @@ fun AddReminderScreen(
                                 checklistItems.toList() +
                                     (newChecklistItem.trim().takeIf { it.isNotEmpty() }
                                         ?.let { listOf(ChecklistItem(it, false)) } ?: emptyList())
-                            )
+                            ),
+                            critical
                         )
                     },
                     enabled = title.isNotBlank() && installmentCount <= 60,

@@ -9,8 +9,7 @@
 | Room (پایگاه‌داده) | Apache License 2.0 |
 | Kotlinx Coroutines | Apache License 2.0 |
 | AndroidX Biometric | Apache License 2.0 |
-| Coil (بارگذاری تصویر) | Apache License 2.0 |
 | Google ML Kit — Text Recognition | مطابق [شرایط استفاده‌ی ML Kit گوگل](https://developers.google.com/ml-kit/terms) — رایگان برای استفاده‌ی تجاری و غیرتجاری |
-| فونت Vazirmatn | SIL Open Font License 1.1 (فایل کامل: `VAZIRMATN_LICENSE.txt`) |
+| فونت Vazirmatn (نسخه‌ی سبک‌شده: فقط حروف فارسی/عربی و لاتین پایه) | SIL Open Font License 1.1 (فایل کامل: `VAZIRMATN_LICENSE.txt`) |
 
 کد خود پروژه (`nsa`) تحت لایسنس MIT منتشر شده — فایل `LICENSE` رو ببین.

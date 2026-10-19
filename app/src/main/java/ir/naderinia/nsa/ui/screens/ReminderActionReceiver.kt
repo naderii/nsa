@@ -42,6 +42,8 @@ class ReminderActionReceiver : BroadcastReceiver() {
 
         // Buttons don't auto-dismiss the notification — do it ourselves right away.
         NotificationManagerCompat.from(context).cancel(reminderId.toInt())
+        // Done / snooze = the person reacted: a «حیاتی» reminder stops repeating its alert.
+        EscalationManager.acknowledge(context, reminderId)
 
         val pendingResult = goAsync()
         val dao = AppDatabase.getInstance(context).reminderDao()

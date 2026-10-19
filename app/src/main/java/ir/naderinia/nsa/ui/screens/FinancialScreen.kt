@@ -66,7 +66,8 @@ fun FinancialScreen(
     onCheckStatusChange: (Reminder, CheckStatus?) -> Unit,
     onRecordPayment: (Reminder, Long) -> Unit,
     onReportClick: () -> Unit,
-    onForecastClick: () -> Unit
+    onForecastClick: () -> Unit,
+    onHelpClick: () -> Unit
 ) {
     val context = LocalContext.current
     var statusOrdinal by rememberSaveable { mutableStateOf(StatusFilter.ACTIVE.ordinal) }
@@ -105,6 +106,12 @@ fun FinancialScreen(
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onHelpClick) { Text("راهنمای بخش مالی ؟") }
+            }
+        }
+
         item {
             MonthFinanceCard(
                 plan = plan,

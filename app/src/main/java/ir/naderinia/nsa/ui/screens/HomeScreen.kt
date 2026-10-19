@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Dashboard
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
@@ -74,6 +76,7 @@ fun HomeScreen(
     onRecordPayment: (Reminder, Long) -> Unit,
     onCheckStatusChange: (Reminder, CheckStatus?) -> Unit,
     onSearchClick: () -> Unit,
+    onAssistantClick: () -> Unit,
     onReportClick: () -> Unit,
     onForecastClick: () -> Unit,
     themeMode: Int,
@@ -83,6 +86,7 @@ fun HomeScreen(
     onSecurityClick: () -> Unit,
     onSoundClick: () -> Unit,
     onAboutClick: () -> Unit,
+    onHelpClick: (String?) -> Unit,
     onBackupClick: () -> Unit,
     onRestoreClick: () -> Unit,
     onOpenToday: () -> Unit,
@@ -143,6 +147,13 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = onAssistantClick) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "دستیار"
+                        )
+                    }
+
                     IconButton(onClick = onSearchClick) {
                         Icon(
                             Icons.Default.Search,
@@ -236,6 +247,20 @@ fun HomeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     onRestoreClick()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("راهنمای کامل") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Lightbulb,
+                                        contentDescription = null
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onHelpClick(null)
                                 }
                             )
 
@@ -376,6 +401,7 @@ fun HomeScreen(
                         summary = financialSummary,
                         analysis = financeAnalysis,
                         onForecastClick = onForecastClick,
+                        onHelpClick = { onHelpClick("finance") },
                         selectedFilter = financialFilter,
                         onFilterChange = { financialFilter = it },
                         paymentLogs = paymentLogs,

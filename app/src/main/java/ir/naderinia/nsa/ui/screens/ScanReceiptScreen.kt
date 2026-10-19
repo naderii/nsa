@@ -16,7 +16,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import coil.compose.rememberAsyncImagePainter
+import ir.naderinia.nsa.util.rememberLocalBitmap
 import ir.naderinia.nsa.util.OcrHelper
 import kotlinx.coroutines.launch
 import java.io.File
@@ -99,12 +99,18 @@ fun ScanReceiptScreen(
             }
 
             imageUri?.let { uri ->
-                Image(
-                    painter = rememberAsyncImagePainter(uri),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(200.dp),
-                    contentScale = ContentScale.Crop
-                )
+                val preview by rememberLocalBitmap(uri, 1024)
+                val loaded = preview
+                if (loaded != null) {
+                    Image(
+                        bitmap = loaded,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Spacer(modifier = Modifier.fillMaxWidth().height(200.dp))
+                }
             }
 
             if (isProcessing) {

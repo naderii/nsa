@@ -15,6 +15,7 @@ import ir.naderinia.nsa.data.isRecurringBill
 import ir.naderinia.nsa.data.parseChecklist
 import ir.naderinia.nsa.data.serializeChecklist
 import ir.naderinia.nsa.notification.BillCycle
+import ir.naderinia.nsa.notification.EscalationManager
 import ir.naderinia.nsa.notification.NotificationScheduler
 import ir.naderinia.nsa.util.FinanceAnalysis
 import ir.naderinia.nsa.util.FinanceInsights
@@ -357,7 +358,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         bankName: String? = null,
         repeatDaysOfWeek: String? = null,
         birthYear: Int? = null,
-        checklist: String? = null
+        checklist: String? = null,
+        priority: Int = 0
     ) {
         viewModelScope.launch {
             @Suppress("NAME_SHADOWING")
@@ -384,7 +386,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 repeatDaysOfWeek = repeatDaysOfWeek,
                 birthYear = birthYear,
                 checklist = checklist,
-                repeatAnchorDay = anchorDayFor(repeatInterval, triggerAtMillis)
+                repeatAnchorDay = anchorDayFor(repeatInterval, triggerAtMillis),
+                priority = priority
             )
 
             val id = dao.upsert(reminder)
@@ -465,6 +468,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      */
     fun setCheckStatus(reminder: Reminder, status: CheckStatus?) {
         viewModelScope.launch {
+            EscalationManager.acknowledge(getApplication(), reminder.id)
 
             val settled =
                 status == CheckStatus.PASSED || status == CheckStatus.CASHED
@@ -549,7 +553,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         bankName: String?,
         repeatDaysOfWeek: String?,
         birthYear: Int? = null,
-        checklist: String? = null
+        checklist: String? = null,
+        priority: Int? = null
     ) {
         viewModelScope.launch {
 
@@ -589,6 +594,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 repeatDaysOfWeek = repeatDaysOfWeek,
                 birthYear = birthYear,
                 checklist = checklist,
+                priority = priority ?: existing.priority,
                 // Same date + same repeat → keep the original anchor (the stored trigger may
                 // already be a shortened-month date); otherwise anchor to the newly picked day.
                 repeatAnchorDay = if (existing.triggerAtMillis == triggerAtMillis &&
@@ -654,6 +660,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleDone(reminder: Reminder) {
         viewModelScope.launch {
+            EscalationManager.acknowledge(getApplication(), reminder.id)
 
             if (!reminder.isDone && reminder.isRecurringBill()) {
                 // Ticking a repeating bill means "this month's is paid": log what was still unpaid
@@ -759,6 +766,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         if (paymentAmount <= 0) return
 
         viewModelScope.launch {
+            EscalationManager.acknowledge(getApplication(), reminder.id)
 
             val newPaid =
                 reminder.amountPaid + paymentAmount
@@ -806,6 +814,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     /** The "خوردم" button on a medication reminder. */
     fun markMedicationTaken(reminder: Reminder) {
         viewModelScope.launch {
+            EscalationManager.acknowledge(getApplication(), reminder.id)
             medicationLogDao.insert(MedicationLog(reminderId = reminder.id))
         }
     }
