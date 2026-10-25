@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Event
@@ -58,7 +59,8 @@ fun AboutScreen(
     versionName: String,
     versionCode: Int,
     onShowChangelog: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenSmsSample: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -276,6 +278,58 @@ fun AboutScreen(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                Spacer(
+                    modifier = Modifier.height(28.dp)
+                )
+
+                // =====================================================
+                // Help us support your bank
+                // =====================================================
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenSmsSample() },
+                    shape = NsaShapes.medium,
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalance,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "بانک خودت رو به نسا اضافه کن",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(2.dp)
+                            )
+
+                            Text(
+                                text = "یه نمونه‌ی پیامک بانکت رو بفرست تا پشتیبانیش اضافه بشه",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
                 }
 
                 Spacer(

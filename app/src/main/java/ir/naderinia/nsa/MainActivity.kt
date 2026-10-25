@@ -83,6 +83,7 @@ import ir.naderinia.nsa.notification.NotificationScheduler
 import ir.naderinia.nsa.ui.screens.ScanReceiptScreen
 import ir.naderinia.nsa.ui.screens.SearchScreen
 import ir.naderinia.nsa.ui.screens.SecuritySettingsScreen
+import ir.naderinia.nsa.ui.screens.SmsSampleScreen
 import ir.naderinia.nsa.ui.components.CrashReportDialog
 import ir.naderinia.nsa.ui.screens.WhatsNewScreen
 import ir.naderinia.nsa.ui.theme.NsaTheme
@@ -849,6 +850,22 @@ class MainActivity : FragmentActivity() {
                                 onShowChangelog = {
                                     navController.navigate("whatsnew")
                                 },
+
+                                onOpenSmsSample = {
+                                    navController.navigate("smsSample")
+                                },
+
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+
+                        composable("smsSample") {
+
+                            SmsSampleScreen(
+                                appVersion =
+                                    BuildConfig.VERSION_NAME,
 
                                 onBack = {
                                     navController.popBackStack()

@@ -17,8 +17,8 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        versionCode = 35
-        versionName = "0.26.0"
+        versionCode = 36
+        versionName = "0.27.0"
 
         // ML Kit ships native libraries for every CPU. Real phones are arm64-v8a or (old ones)
         // armeabi-v7a; x86/x86_64 are only emulators and a few rare tablets. Dropping them is
